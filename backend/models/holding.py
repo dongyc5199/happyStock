@@ -14,12 +14,10 @@ class SimHolding(Model):
     """
 
     id = fields.IntField(pk=True, description="持仓ID")
-    account_id = fields.IntField(description="账户ID")
-    asset_id = fields.IntField(description="资产ID")
     quantity = fields.DecimalField(max_digits=18, decimal_places=4, description="持有数量")
     avg_price = fields.DecimalField(max_digits=18, decimal_places=4, description="平均成本价")
 
-    # 外键关系
+    # 外键关系（Tortoise-ORM 会自动创建 account_id 和 asset_id 字段）
     account: fields.ForeignKeyRelation["SimAccount"] = fields.ForeignKeyField(
         "models.SimAccount", related_name="holdings", on_delete=fields.CASCADE
     )

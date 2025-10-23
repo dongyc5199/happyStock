@@ -16,7 +16,9 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # 数据库配置
-    DATABASE_URL: str = "postgres://postgres:postgres@localhost:5432/fin_tech_mvp"
+    # 生产环境使用 PostgreSQL: postgres://postgres:postgres@localhost:5432/fin_tech_mvp
+    # 开发环境可使用 SQLite: sqlite://db.sqlite3
+    DATABASE_URL: str = "sqlite://db.sqlite3"
 
     # Redis配置
     REDIS_HOST: str = "localhost"
@@ -57,7 +59,6 @@ TORTOISE_ORM = {
                 "models.asset",
                 "models.trade",
                 "models.holding",
-                "aerich.models",  # 数据库迁移工具
             ],
             "default_connection": "default",
         },

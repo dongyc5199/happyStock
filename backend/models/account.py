@@ -14,7 +14,6 @@ class SimAccount(Model):
     """
 
     id = fields.IntField(pk=True, description="账户ID")
-    user_id = fields.IntField(description="用户ID")
     account_name = fields.CharField(max_length=100, description="账户名称")
     initial_balance = fields.DecimalField(
         max_digits=18, decimal_places=2, description="初始资金"
@@ -24,7 +23,7 @@ class SimAccount(Model):
     )
     created_at = fields.DatetimeField(auto_now_add=True, description="创建时间")
 
-    # 外键关系
+    # 外键关系（Tortoise-ORM 会自动创建 user_id 字段）
     user: fields.ForeignKeyRelation["User"] = fields.ForeignKeyField(
         "models.User", related_name="accounts", on_delete=fields.CASCADE
     )

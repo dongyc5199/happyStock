@@ -6,7 +6,9 @@
       "Bash(pipenv install)",
       "Bash(pipenv run python:*)",
       "Bash(pipenv install:*)",
-      "Bash(python -c:*)"
+      "Bash(python -c:*)",
+      "Bash(pg_isready:*)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []

@@ -18,11 +18,11 @@ async def lifespan(app: FastAPI):
     启动时初始化数据库，关闭时清理资源
     """
     # 启动时执行
-    print("🚀 Starting up...")
-    print(f"📊 Database: {settings.DATABASE_URL}")
+    print("Starting up...")
+    print(f"Database: {settings.DATABASE_URL}")
     yield
     # 关闭时执行
-    print("🛑 Shutting down...")
+    print("Shutting down...")
 
 
 # 创建 FastAPI 应用实例

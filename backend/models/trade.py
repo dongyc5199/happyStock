@@ -13,14 +13,12 @@ class SimTrade(Model):
     """
 
     id = fields.IntField(pk=True, description="交易ID")
-    account_id = fields.IntField(description="账户ID")
-    asset_id = fields.IntField(description="资产ID")
     trade_type = fields.CharField(max_length=10, description="交易类型")  # BUY/SELL
     quantity = fields.DecimalField(max_digits=18, decimal_places=4, description="交易数量")
     price = fields.DecimalField(max_digits=18, decimal_places=4, description="成交价格")
     trade_time = fields.DatetimeField(auto_now_add=True, description="交易时间")
 
-    # 外键关系
+    # 外键关系（Tortoise-ORM 会自动创建 account_id 和 asset_id 字段）
     account: fields.ForeignKeyRelation["SimAccount"] = fields.ForeignKeyField(
         "models.SimAccount", related_name="trades", on_delete=fields.CASCADE
     )
