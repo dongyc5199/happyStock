@@ -17,6 +17,9 @@ class Asset(Model):
     name = fields.CharField(max_length=100, description="资产名称")
     exchange = fields.CharField(max_length=50, null=True, description="所属交易所")
     asset_type = fields.CharField(max_length=20, description="资产类型")  # 股票/基金/虚拟货币
+    current_price = fields.DecimalField(
+        max_digits=18, decimal_places=4, null=True, description="当前价格"
+    )
     created_at = fields.DatetimeField(auto_now_add=True, description="创建时间")
 
     class Meta:

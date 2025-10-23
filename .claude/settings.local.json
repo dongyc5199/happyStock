@@ -8,7 +8,8 @@
       "Bash(pipenv install:*)",
       "Bash(python -c:*)",
       "Bash(pg_isready:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(sqlite3:*)"
     ],
     "deny": [],
     "ask": []

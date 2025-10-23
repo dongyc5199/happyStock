@@ -90,19 +90,17 @@ class AssetService:
         offset = (page - 1) * page_size
 
         # 搜索资产（模糊匹配名称或代码）
-        assets = (
-            await Asset.filter(name__icontains=keyword)
-            .union(Asset.filter(symbol__icontains=keyword))
-            .offset(offset)
-            .limit(page_size)
+        # 使用 Q 对象实现 OR 查询
+        from tortoise.expressions import Q
+
+        query = Asset.filter(
+            Q(name__icontains=keyword) | Q(symbol__icontains=keyword)
         )
 
+        assets = await query.offset(offset).limit(page_size)
+
         # 获取总数
-        total = await (
-            Asset.filter(name__icontains=keyword)
-            .union(Asset.filter(symbol__icontains=keyword))
-            .count()
-        )
+        total = await query.count()
 
         return assets, total
 
