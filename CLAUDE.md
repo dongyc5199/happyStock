@@ -9,7 +9,17 @@ happyStock is a financial technology MVP platform focused on simulated stock tra
 - **Backend**: FastAPI (Python 3.13) with PostgreSQL and Redis
 - **Database**: MySQL/PostgreSQL for structured data, Redis for caching
 
-The project is in early MVP stage, implementing core features including user authentication, professional charting (TradingView integration planned), simulated trading, and social networking capabilities.
+### Product Vision
+打造一个**专业图表工具 + AI模拟交易 + 投资社交平台**的综合性金融科技产品，通过游戏化和社交化降低投资学习门槛，帮助用户在零风险环境下提升投资能力。
+
+### Core Value Propositions
+- **专业性**: TradingView级别的专业图表分析工具
+- **趣味性**: 游戏化学习体验，降低学习门槛
+- **社交性**: 投资者社区，知识共享与交流
+- **安全性**: 纯模拟交易，无金融牌照风险
+
+### Current Status
+The project is in **early MVP stage (Week 1-2)**, having completed initial infrastructure setup. Currently implementing core features including user authentication, professional charting (TradingView integration planned), simulated trading, and social networking capabilities.
 
 ## Repository Structure
 
@@ -110,6 +120,69 @@ The complete database schema is defined in `sql_scripts/create_user_table.sql` a
 - Character set: utf8mb4_unicode_ci for full Unicode support
 - Engine: InnoDB for transaction support
 
+## MVP Development Roadmap (0-3 Months)
+
+### Month 1: Infrastructure & User System
+
+**Week 1-2: Technical Setup** ✅ (Current Stage)
+- [x] Development environment setup (Cursor + GitHub Copilot)
+- [x] Project initialization (Next.js + TypeScript)
+- [x] Database architecture design (PostgreSQL + Redis)
+- [x] Initial project structure created
+
+**Week 3-4: User System Development** (Next)
+- [ ] User registration/login (JWT authentication)
+- [ ] User profile system
+- [ ] Permission management
+- [ ] Personal center page
+- [ ] Account security features
+- **KPI**: Registration conversion rate > 30%, Login response time < 1s
+
+### Month 2: Core Features
+
+**Week 5-6: Professional Charting System**
+- [ ] Integrate TradingView Charting Library or develop custom charts
+- [ ] Implement K-line, candlestick charts, technical indicators
+- [ ] Drawing tools (trend lines, support/resistance)
+- [ ] Multi-timeframe switching (1min to monthly)
+- [ ] Chart data caching optimization
+- **Tech Stack**: WebGL rendering, WebSocket real-time push, smooth rendering for millions of data points
+
+**Week 7-8: Simulated Trading System**
+- [ ] Simulated account system design
+- [ ] Trading matching engine
+- [ ] Order management system
+- [ ] Position & P&L calculation
+- [ ] Trading history records
+- **AI Integration**: Simple AI recommendation system, risk assessment model, smart stop-loss alerts
+
+### Month 3: Product Polish & Launch
+
+**Week 9-10: Social Features (Basic Version)**
+- [ ] User follow system
+- [ ] Trading updates sharing
+- [ ] Comment & like functionality
+- [ ] Simple leaderboards
+- [ ] Basic community rules
+
+**Week 11-12: Testing & Launch**
+- [ ] Comprehensive functional testing
+- [ ] Performance optimization
+- [ ] Security audit
+- [ ] Production deployment
+- [ ] Monitoring system setup
+
+### 3-Month Success Metrics
+- ✅ MVP product successfully launched
+- ✅ Core features complete and usable
+- ✅ Mobile responsive design
+- 📊 Registered users: 1,000+
+- 📊 Daily active users: 200+
+- 📊 User retention rate: 70%+
+- ⚡ Page load time: < 3s
+- ⚡ API response time: < 500ms
+- ⚡ System availability: > 99%
+
 ## Development Workflow
 
 ### When Adding New Features
@@ -117,33 +190,129 @@ The complete database schema is defined in `sql_scripts/create_user_table.sql` a
 2. Implement backend API endpoints in `backend/main.py` (will be modularized later)
 3. Create frontend components in `frontend/src/app/` using App Router conventions
 4. Use TypeScript path alias `@/` for clean imports
-
-### Planned Features (from MVP roadmap)
-- User authentication with JWT
-- TradingView chart integration (50+ technical indicators)
-- Multi-timeframe support (1min to monthly)
-- Real-time market data integration
-- AI-powered trading suggestions
-- Mobile responsive design
+5. Test thoroughly before committing
+6. Update this CLAUDE.md if architectural decisions are made
 
 ## Technical Stack Details
 
-**Frontend Dependencies**:
+### Current Implementation
+**Frontend**:
 - React 19.1.0 (latest stable)
 - Next.js 15.4.6 with Turbopack for fast dev builds
 - TypeScript 5+
+- Tailwind CSS v4
 - ESLint with Next.js config
 
-**Backend Dependencies**:
+**Backend**:
 - FastAPI (async web framework)
 - Uvicorn (ASGI server)
 - psycopg2-binary (PostgreSQL adapter)
 - redis (Redis client)
 
+### Planned Tech Stack (from roadmap)
+
+**Frontend (Future)**:
+- UI Library: Ant Design / Material-UI
+- Charts: TradingView Charting Library / D3.js
+- State Management: Zustand / Redux Toolkit
+- Styling: TailwindCSS ✅ (already in use)
+
+**Backend (Future)**:
+- Alternative framework consideration: Node.js + Express / NestJS
+- Message Queue: RabbitMQ / Kafka (for high-volume trading events)
+- WebSocket: Socket.io (for real-time market data)
+- API Documentation: Swagger
+
+**AI/ML Stack (Future)**:
+- Machine Learning: TensorFlow.js / PyTorch
+- Natural Language: Claude API / GPT-4 API
+- AutoML: Google AutoML / H2O.ai
+- Data Analysis: Pandas + NumPy
+
+## Budget & Resources
+
+### Monthly Operating Costs (Estimated: ¥4,500)
+- **AI Tools**: ¥2,000/month
+  - Cursor Pro: $20
+  - GitHub Copilot: $10
+  - Claude API: $20
+  - V0: $30
+- **Cloud Services**: ¥1,500/month
+  - Server: ¥800
+  - CDN: ¥300
+  - Database: ¥400
+- **Third-party APIs**: ¥1,000/month
+  - Market data: ¥800
+  - Other services: ¥200
+
+## Key Decision Points
+
+### Critical Choices to Make
+1. **Charting Solution**:
+   - Option A: TradingView Charting Library (paid but professional, faster to market)
+   - Option B: Custom development with D3.js (lower cost but longer development cycle)
+   - **Recommendation**: Start with TradingView for MVP, consider custom solution post-validation
+
+2. **Market Data Source**:
+   - Option A: Free data sources (limitations on frequency/features)
+   - Option B: Paid data services (higher cost but stable and reliable)
+   - **Recommendation**: Free for MVP testing, upgrade to paid after user validation
+
+3. **Team Expansion Timing**:
+   - Option A: Hire immediately when funding secured
+   - Option B: Validate MVP first, then expand team
+   - **Recommendation**: Solo through MVP, expand after achieving 1,000+ users
+
+## Risk Management
+
+### Technical Risks
+- **Chart Performance**: Use mature charting libraries, optimize with WebGL rendering
+- **Data Latency**: CDN acceleration + Redis caching optimization
+- **System Stability**: Automated monitoring + quick rollback mechanisms
+
+### Market Risks
+- **Slow User Growth**: Strengthen content marketing, community building
+- **Competition**: Differentiate with unique features (AI + gamification + social)
+- **Monetization**: Diversify revenue streams (freemium, B2B API, premium features)
+
+### Compliance Risks
+- **Clear Educational Positioning**: Emphasize learning and simulation, not real trading
+- **Avoid Real Trading**: Pure simulation only, no financial license required
+- **Content Moderation**: Implement automated and manual review systems
+
+## Long-term Roadmap
+
+### Phase 1: MVP (0-3 months) - Current
+- Basic functionality development
+- 1,000 seed users
+- Product validation
+
+### Phase 2: Growth (3-6 months)
+- Enhanced social features
+- Gamification mechanics
+- 10,000 registered users
+- First revenue
+
+### Phase 3: Expansion (6-12 months)
+- AI feature upgrades
+- B2B service development
+- 100,000 registered users
+- Monthly revenue: ¥500,000+
+
+### Phase 4: Maturity (12+ months)
+- Platform ecosystem building
+- Open API platform
+- International expansion
+- Funding round or acquisition
+
 ## Important Notes
 
 - The frontend uses **Turbopack** for development (`--turbopack` flag in dev script)
-- Database schema uses **MySQL syntax** but project mentions PostgreSQL - verify target DB
-- All user-facing text in database and docs is in **Chinese**
-- Project is designed for **solo developer** leveraging AI tools (Cursor, Claude, GitHub Copilot)
+- Database schema uses **MySQL syntax** but project mentions PostgreSQL - verify target DB before production
+- All user-facing text in database and docs is in **Chinese** (target market: China)
+- Project is designed for **solo developer** leveraging AI tools (Cursor, Claude, GitHub Copilot, V0)
 - MVP target is **3-month development cycle**
+- **Focus on core features first** - avoid feature creep during MVP stage
+- **Data-driven decisions** - establish monitoring early, make all decisions based on metrics
+- **User-first approach** - rapid response to user feedback, continuous iteration
+- **AI-powered efficiency** - leverage AI tools extensively while maintaining code quality
