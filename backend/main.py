@@ -115,11 +115,14 @@ async def health_check():
     }
 
 
-# API 路由将在这里注册
-# app.include_router(accounts.router, prefix="/api/v1", tags=["accounts"])
-# app.include_router(trades.router, prefix="/api/v1", tags=["trades"])
-# app.include_router(holdings.router, prefix="/api/v1", tags=["holdings"])
-# app.include_router(assets.router, prefix="/api/v1", tags=["assets"])
+# 导入路由
+from routers import accounts, assets
+
+# 注册 API 路由
+app.include_router(accounts.router, prefix="/api/v1", tags=["账户管理"])
+app.include_router(assets.router, prefix="/api/v1", tags=["资产管理"])
+# app.include_router(trades.router, prefix="/api/v1", tags=["交易"])
+# app.include_router(holdings.router, prefix="/api/v1", tags=["持仓"])
 
 
 if __name__ == "__main__":
