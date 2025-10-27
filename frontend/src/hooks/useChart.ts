@@ -6,8 +6,10 @@ import {
   ISeriesApi,
   CandlestickSeries,
   HistogramSeries,
+  LineSeries,
   CandlestickSeriesPartialOptions,
-  HistogramSeriesPartialOptions
+  HistogramSeriesPartialOptions,
+  LineSeriesPartialOptions
 } from 'lightweight-charts';
 
 /**
@@ -156,10 +158,44 @@ export function useChart(containerRef: React.RefObject<HTMLDivElement>) {
     }
   }, []);
 
+  /**
+   * 添加线性系列（用于技术指标如 EMA、MA 等）
+   */
+  const addLineSeries = useCallback((options?: LineSeriesPartialOptions): ISeriesApi<'Line'> | null => {
+    if (!chartRef.current) {
+      console.error('Chart instance not initialized');
+      return null;
+    }
+
+    try {
+      const series = chartRef.current.addSeries(LineSeries, {
+        color: '#2962FF',
+        lineWidth: 2,
+        crosshairMarkerVisible: true,
+        crosshairMarkerRadius: 4,
+        ...options,
+      });
+
+      // 使用与K线相同的价格刻度
+      series.priceScale().applyOptions({
+        scaleMargins: {
+          top: 0.1,
+          bottom: 0.25,
+        },
+      });
+
+      return series;
+    } catch (error) {
+      console.error('Error adding line series:', error);
+      return null;
+    }
+  }, []);
+
   return {
     chart,
     chartRef, // 也返回 chartRef 以便外部直接访问
     addCandlestickSeries,
     addHistogramSeries,
+    addLineSeries,
   };
 }

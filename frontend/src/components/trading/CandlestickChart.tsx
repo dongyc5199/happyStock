@@ -2,8 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useChart } from '@/hooks/useChart';
-import { ISeriesApi, CandlestickData, HistogramData } from 'lightweight-charts';
+import { useChartData } from '@/hooks/useChartData';
+import { ISeriesApi, CandlestickData, HistogramData, LineData } from 'lightweight-charts';
 import { getKlineData } from '@/lib/api/trading';
+import { calculateEMA, getEMAStyle, EMA_PRESETS } from '@/lib/indicators/ema';
+import MACDChart from './MACDChart';
+import KlineCountdown from './KlineCountdown';
+import { Timeframe as TimeframeType } from '@/lib/utils/timeUtils';
 
 type Timeframe = '5m' | '15m' | '30m' | '60m' | '120m' | 'D' | 'W' | 'M';
 
@@ -20,18 +25,95 @@ interface CandlestickChartProps {
  */
 export default function CandlestickChart({ assetSymbol, className = '' }: CandlestickChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { chart, addCandlestickSeries, addHistogramSeries } = useChart(containerRef);
+  const { chart, addCandlestickSeries, addHistogramSeries, addLineSeries } = useChart(containerRef);
 
   const [timeframe, setTimeframe] = useState<Timeframe>('D');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  // 将 Timeframe 转换为 TimeframeType
+  const getIntervalForHook = (tf: Timeframe): TimeframeType => {
+    const map: Record<Timeframe, TimeframeType> = {
+      '5m': '5m',
+      '15m': '15m',
+      '30m': '30m',
+      '60m': '60m',
+      '120m': '120m',
+      'D': '1d',
+      'W': '1w',
+      'M': '1M',
+    };
+    return map[tf];
+  };
+
+  // 使用 useChartData Hook 进行动态数据加载
+  const {
+    data: chartData,
+    loadedRange,
+    loadingState,
+    loadHistoricalData,
+    loadLatestData,
+  } = useChartData({
+    chart,
+    symbol: assetSymbol,
+    interval: getIntervalForHook(timeframe),
+    enabled: true,
+    loadBuffer: 50,
+    loadLimit: 200,
+  });
+
+  // 图表类型配置（从 LocalStorage 加载用户偏好）
+  const [chartType, setChartType] = useState<'candlestick' | 'line'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('chartType');
+      return (saved === 'line' ? 'line' : 'candlestick') as 'candlestick' | 'line';
+    }
+    return 'candlestick';
+  });
+
+  // EMA 显示配置
+  const [enabledEMAs, setEnabledEMAs] = useState<number[]>([5, 10, 20, 30]); // 默认显示 EMA5, 10, 20, 30
+  const [showEMAConfig, setShowEMAConfig] = useState(false);
+
+  // MACD 显示配置
+  const [showMACD, setShowMACD] = useState(true); // 默认显示 MACD
+  const [macdData, setMacdData] = useState<Array<{ time: string | number; close: number }>>([]);
+
+  // 倒计时配置
+  const [showCountdown, setShowCountdown] = useState(true); // 默认显示倒计时
+  const [lastBarTime, setLastBarTime] = useState<number>(0); // 最后一根K线的时间戳（秒）
 
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const lineSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+  const emaSeriesRef = useRef<Map<number, ISeriesApi<'Line'>>>(new Map());
+  const emaConfigRef = useRef<HTMLDivElement>(null);
 
-  // 加载 K线数据
+  // 保存用户偏好到 LocalStorage
   useEffect(() => {
-    if (!chart || !assetSymbol) return;
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('chartType', chartType);
+    }
+  }, [chartType]);
+
+  // 点击外部关闭 EMA 配置面板
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (emaConfigRef.current && !emaConfigRef.current.contains(event.target as Node)) {
+        setShowEMAConfig(false);
+      }
+    };
+
+    if (showEMAConfig) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showEMAConfig]);
+
+  // 渲染图表数据（当 chartData 变化时更新图表）
+  useEffect(() => {
+    if (!chart || !chartData || chartData.length === 0) return;
 
     // 清理旧的 series
     if (candlestickSeriesRef.current) {
@@ -42,6 +124,14 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
       }
       candlestickSeriesRef.current = null;
     }
+    if (lineSeriesRef.current) {
+      try {
+        chart.removeSeries(lineSeriesRef.current);
+      } catch (e) {
+        console.warn('Failed to remove line series:', e);
+      }
+      lineSeriesRef.current = null;
+    }
     if (volumeSeriesRef.current) {
       try {
         chart.removeSeries(volumeSeriesRef.current);
@@ -50,180 +140,167 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
       }
       volumeSeriesRef.current = null;
     }
-
-    const loadChartData = async () => {
-      setLoading(true);
-      setError(null);
-
+    // 清理所有 EMA 线
+    emaSeriesRef.current.forEach((series, period) => {
       try {
-        // 将 timeframe 映射到 API interval 参数
-        const intervalMap: Record<Timeframe, '5m' | '15m' | '30m' | '60m' | '120m' | '1d' | '1w' | '1M'> = {
-          '5m': '5m',
-          '15m': '15m',
-          '30m': '30m',
-          '60m': '60m',
-          '120m': '120m',
-          'D': '1d',
-          'W': '1w',
-          'M': '1M',
-        };
-        const interval = intervalMap[timeframe];
-
-        // 根据时间周期调整数据量
-        const limitMap: Record<Timeframe, number> = {
-          '5m': 200,   // 5分钟：200根 = 约16.7小时
-          '15m': 200,  // 15分钟：200根 = 约2天
-          '30m': 200,  // 30分钟：200根 = 约4天
-          '60m': 200,  // 60分钟：200根 = 约8天
-          '120m': 200, // 120分钟：200根 = 约16天
-          'D': 90,     // 日K：90天
-          'W': 52,     // 周K：52周
-          'M': 24,     // 月K：24个月
-        };
-        const limit = limitMap[timeframe];
-
-        // 调用真实 API 获取 K线数据
-        const response = await getKlineData(assetSymbol, interval, limit);
-        console.log('API Response:', response);
-        console.log('First kline:', response.klines[0]);
-
-        // 将后端返回的数据转换为 Lightweight Charts 格式
-        // 注意：lightweight-charts 需要时间格式为 YYYY-MM-DD 字符串（日K及以上）或 UTC 时间戳（秒，分钟K）
-        const candlestickData: CandlestickData[] = response.klines
-          .map((kline) => {
-            // 对于分钟级别，使用时间戳；对于日K及以上，使用日期字符串
-            const isMinuteInterval = ['5m', '15m', '30m', '60m', '120m'].includes(interval);
-            const date = new Date(kline.time * 1000);
-
-            let timeValue: string | number;
-            if (isMinuteInterval) {
-              // 分钟级别：使用 UTC 时间戳（秒）
-              timeValue = kline.time as any;
-            } else {
-              // 日K及以上：使用 YYYY-MM-DD 格式
-              timeValue = date.toISOString().split('T')[0];
-            }
-
-            const open = parseFloat(kline.open);
-            const high = parseFloat(kline.high);
-            const low = parseFloat(kline.low);
-            const close = parseFloat(kline.close);
-
-            // 验证 OHLC 数据的有效性：low <= open,close <= high
-            if (low > open || low > close || low > high || high < open || high < close) {
-              console.warn('Invalid OHLC data:', { time: timeValue, open, high, low, close });
-            }
-
-            return {
-              time: timeValue as any,
-              open,
-              high,
-              low,
-              close,
-            };
-          })
-          .sort((a, b) => (a.time > b.time ? 1 : -1)); // 确保按时间升序排列
-
-        console.log('Candlestick data (first 3):', candlestickData.slice(0, 3));
-        console.log('Candlestick data (last 3):', candlestickData.slice(-3));
-
-        // 生成成交量数据
-        const volumeData: HistogramData[] = response.klines
-          .map((kline) => {
-            const isMinuteInterval = ['5m', '15m', '30m', '60m', '120m'].includes(interval);
-            const date = new Date(kline.time * 1000);
-
-            let timeValue: string | number;
-            if (isMinuteInterval) {
-              timeValue = kline.time as any;
-            } else {
-              timeValue = date.toISOString().split('T')[0];
-            }
-
-            return {
-              time: timeValue as any,
-              value: kline.volume || 0,
-              color: parseFloat(kline.close) >= parseFloat(kline.open) ? '#26a69a' : '#ef5350',
-            };
-          })
-          .sort((a, b) => (a.time > b.time ? 1 : -1)); // 确保按时间升序排列
-
-        console.log('Volume data (first 3):', volumeData.slice(0, 3));
-
-        // 创建 K线系列（使用 hook 提供的方法）
-        console.log('Creating candlestick series...');
-
-        try {
-          if (!candlestickSeriesRef.current && addCandlestickSeries) {
-            candlestickSeriesRef.current = addCandlestickSeries({
-              upColor: '#26a69a',
-              downColor: '#ef5350',
-              borderVisible: false,
-              wickUpColor: '#26a69a',
-              wickDownColor: '#ef5350',
-            });
-
-            if (!candlestickSeriesRef.current) {
-              throw new Error('Failed to create candlestick series');
-            }
-            console.log('Candlestick series created successfully');
-          }
-
-          if (candlestickSeriesRef.current) {
-            console.log('Setting candlestick data...');
-            console.log('Sample data point:', candlestickData[0]);
-            candlestickSeriesRef.current.setData(candlestickData);
-            console.log('Candlestick data set successfully');
-          }
-        } catch (error) {
-          console.error('Error with candlestick chart:', error);
-          console.error('Error stack:', (error as Error).stack);
-          console.error('Data that failed:', candlestickData.slice(0, 5));
-          throw error;
-        }
-
-        // 创建成交量系列（使用 hook 提供的方法）
-        console.log('Creating volume series...');
-        try {
-          if (!volumeSeriesRef.current && addHistogramSeries) {
-            volumeSeriesRef.current = addHistogramSeries({
-              color: '#26a69a',
-              priceFormat: {
-                type: 'volume',
-              },
-              priceScaleId: '',
-            });
-
-            if (!volumeSeriesRef.current) {
-              throw new Error('Failed to create volume series');
-            }
-            console.log('Volume series created successfully');
-          }
-
-          if (volumeSeriesRef.current) {
-            console.log('Setting volume data...');
-            volumeSeriesRef.current.setData(volumeData);
-            console.log('Volume data set successfully');
-          }
-        } catch (error) {
-          console.error('Error setting volume data:', error);
-          console.error('Data that failed:', volumeData);
-          throw error;
-        }
-
-        // 自动缩放到数据范围
-        chart.timeScale().fitContent();
-
-      } catch (err: any) {
-        setError(err.message || '加载图表数据失败');
-        console.error('加载K线数据失败:', err);
-      } finally {
-        setLoading(false);
+        chart.removeSeries(series);
+      } catch (e) {
+        console.warn(`Failed to remove EMA${period} series:`, e);
       }
-    };
+    });
+    emaSeriesRef.current.clear();
 
-    loadChartData();
-  }, [chart, assetSymbol, timeframe, addCandlestickSeries, addHistogramSeries]);
+    console.log('Rendering chart with data:', chartData.length, 'bars');
+
+    // 生成成交量数据（使用随机值，因为 chartData 不包含 volume）
+    const volumeData: HistogramData[] = chartData.map((item) => ({
+      time: item.time,
+      value: Math.random() * 1000000, // 随机成交量
+      color: item.close >= item.open ? '#26a69a' : '#ef5350',
+    }));
+
+    // 根据 chartType 创建不同的系列
+    console.log('Creating chart series, type:', chartType);
+
+    try {
+      if (chartType === 'candlestick') {
+        // 创建蜡烛图系列
+        if (!candlestickSeriesRef.current && addCandlestickSeries) {
+          candlestickSeriesRef.current = addCandlestickSeries({
+            upColor: '#26a69a',
+            downColor: '#ef5350',
+            borderVisible: false,
+            wickUpColor: '#26a69a',
+            wickDownColor: '#ef5350',
+          });
+
+          if (!candlestickSeriesRef.current) {
+            throw new Error('Failed to create candlestick series');
+          }
+          console.log('Candlestick series created successfully');
+        }
+
+        if (candlestickSeriesRef.current) {
+          console.log('Setting candlestick data...');
+          candlestickSeriesRef.current.setData(chartData);
+          console.log('Candlestick data set successfully');
+        }
+      } else {
+        // 创建线形图系列
+        if (!lineSeriesRef.current && addLineSeries) {
+          lineSeriesRef.current = addLineSeries({
+            color: '#2962FF',
+            lineWidth: 2,
+            title: '收盘价',
+          });
+
+          if (!lineSeriesRef.current) {
+            throw new Error('Failed to create line series');
+          }
+          console.log('Line series created successfully');
+        }
+
+        if (lineSeriesRef.current) {
+          console.log('Setting line data...');
+          // 线形图只需要时间和收盘价
+          const lineData: LineData[] = chartData.map(item => ({
+            time: item.time,
+            value: item.close,
+          }));
+          lineSeriesRef.current.setData(lineData);
+          console.log('Line data set successfully');
+        }
+      }
+    } catch (error) {
+      console.error('Error creating chart series:', error);
+      console.error('Error stack:', (error as Error).stack);
+      console.error('Data that failed:', chartData.slice(0, 5));
+    }
+
+    // 创建成交量系列
+    console.log('Creating volume series...');
+    try {
+      if (!volumeSeriesRef.current && addHistogramSeries) {
+        volumeSeriesRef.current = addHistogramSeries({
+          color: '#26a69a',
+          priceFormat: {
+            type: 'volume',
+          },
+          priceScaleId: '',
+        });
+
+        if (!volumeSeriesRef.current) {
+          throw new Error('Failed to create volume series');
+        }
+        console.log('Volume series created successfully');
+      }
+
+      if (volumeSeriesRef.current) {
+        console.log('Setting volume data...');
+        volumeSeriesRef.current.setData(volumeData);
+        console.log('Volume data set successfully');
+      }
+    } catch (error) {
+      console.error('Error setting volume data:', error);
+      console.error('Data that failed:', volumeData);
+    }
+
+    // 准备价格数据用于指标计算
+    const priceData = chartData.map(item => ({
+      time: item.time,
+      close: item.close,
+    }));
+
+    // 更新 MACD 数据
+    setMacdData(priceData);
+
+    // 更新最后一根K线时间（用于倒计时）
+    if (chartData.length > 0) {
+      const lastBar = chartData[chartData.length - 1];
+      const lastTime = typeof lastBar.time === 'number'
+        ? lastBar.time
+        : Math.floor(Date.parse(lastBar.time as string) / 1000);
+      setLastBarTime(lastTime);
+    }
+
+    // 计算并添加 EMA 指标线
+    if (enabledEMAs.length > 0 && addLineSeries) {
+      console.log('Calculating and adding EMA indicators...');
+
+      // 为每个启用的 EMA 周期创建线系列
+      enabledEMAs.forEach(period => {
+        try {
+          // 计算 EMA
+          const emaData = calculateEMA(priceData, period);
+
+          if (emaData.length > 0) {
+            // 获取 EMA 样式
+            const style = getEMAStyle(period);
+
+            // 创建 EMA 线系列
+            const emaSeries = addLineSeries({
+              color: style.color,
+              lineWidth: style.lineWidth,
+              title: style.title,
+            });
+
+            if (emaSeries) {
+              // 设置 EMA 数据
+              emaSeries.setData(emaData as LineData[]);
+              // 保存到 ref
+              emaSeriesRef.current.set(period, emaSeries);
+              console.log(`EMA${period} added successfully`);
+            }
+          }
+        } catch (error) {
+          console.error(`Error adding EMA${period}:`, error);
+        }
+      });
+    }
+
+    // 自动缩放到数据范围
+    chart.timeScale().fitContent();
+  }, [chart, chartData, chartType, enabledEMAs, addCandlestickSeries, addHistogramSeries, addLineSeries]);
 
   // 切换时间周期
   const handleTimeframeChange = (newTimeframe: Timeframe) => {
@@ -234,6 +311,97 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
   const handleResetZoom = () => {
     if (chart) {
       chart.timeScale().fitContent();
+    }
+  };
+
+  // 切换 EMA 显示
+  const toggleEMA = (period: number) => {
+    setEnabledEMAs(prev => {
+      if (prev.includes(period)) {
+        // 移除该周期
+        return prev.filter(p => p !== period);
+      } else {
+        // 添加该周期
+        return [...prev, period].sort((a, b) => a - b);
+      }
+    });
+  };
+
+  // 快速设置预设组合
+  const setEMAPreset = (preset: keyof typeof EMA_PRESETS) => {
+    setEnabledEMAs([...EMA_PRESETS[preset]]);
+    setShowEMAConfig(false);
+  };
+
+  // 将 Timeframe 转换为 TimeframeType
+  const getCountdownInterval = (tf: Timeframe): TimeframeType => {
+    const intervalMap: Record<Timeframe, TimeframeType> = {
+      '5m': '5m',
+      '15m': '15m',
+      '30m': '30m',
+      '60m': '60m',
+      '120m': '120m',
+      'D': '1d',
+      'W': '1w',
+      'M': '1M',
+    };
+    return intervalMap[tf];
+  };
+
+  // 倒计时归零回调：刷新最新K线数据
+  const handleCountdownZero = async () => {
+    if (!chart || !assetSymbol) return;
+
+    try {
+      // 获取最新的一根K线
+      const intervalMap: Record<Timeframe, '5m' | '15m' | '30m' | '60m' | '120m' | '1d' | '1w' | '1M'> = {
+        '5m': '5m',
+        '15m': '15m',
+        '30m': '30m',
+        '60m': '60m',
+        '120m': '120m',
+        'D': '1d',
+        'W': '1w',
+        'M': '1M',
+      };
+      const interval = intervalMap[timeframe];
+
+      // 只获取最新1根K线
+      const response = await getKlineData(assetSymbol, interval, 1);
+
+      if (response.klines.length > 0 && candlestickSeriesRef.current) {
+        const latestKline = response.klines[0];
+        const isMinuteInterval = ['5m', '15m', '30m', '60m', '120m'].includes(interval);
+
+        let timeValue: string | number;
+        if (isMinuteInterval) {
+          timeValue = latestKline.time as any;
+        } else {
+          const date = new Date(latestKline.time * 1000);
+          timeValue = date.toISOString().split('T')[0];
+        }
+
+        const newBar: CandlestickData = {
+          time: timeValue as any,
+          open: parseFloat(latestKline.open),
+          high: parseFloat(latestKline.high),
+          low: parseFloat(latestKline.low),
+          close: parseFloat(latestKline.close),
+        };
+
+        // 更新图表数据（追加或更新最后一根K线）
+        candlestickSeriesRef.current.update(newBar);
+
+        // 更新最后一根K线时间
+        const newLastTime = typeof newBar.time === 'number'
+          ? newBar.time
+          : Math.floor(Date.parse(newBar.time as string) / 1000);
+        setLastBarTime(newLastTime);
+
+        console.log('Updated latest kline:', newBar);
+      }
+    } catch (error) {
+      console.error('Failed to refresh kline data:', error);
     }
   };
 
@@ -285,6 +453,143 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
           </div>
         </div>
 
+        {/* EMA 指标配置 */}
+        <div className="relative" ref={emaConfigRef}>
+          <button
+            onClick={() => setShowEMAConfig(!showEMAConfig)}
+            className={`bg-[#131722]/90 px-3 py-1 rounded text-sm transition-colors ${
+              enabledEMAs.length > 0
+                ? 'text-[#26a69a] hover:bg-[#2a2e39]'
+                : 'text-gray-400 hover:text-white hover:bg-[#2a2e39]'
+            }`}
+            title="EMA 技术指标"
+          >
+            EMA {enabledEMAs.length > 0 && `(${enabledEMAs.length})`}
+          </button>
+
+          {/* EMA 配置面板 */}
+          {showEMAConfig && (
+            <div className="absolute top-full left-0 mt-2 bg-[#131722] border border-gray-700 rounded shadow-lg p-4 min-w-[280px] z-20">
+              {/* 快速预设 */}
+              <div className="mb-4">
+                <div className="text-xs text-gray-400 mb-2">快速预设</div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setEMAPreset('short')}
+                    className="px-3 py-1 text-xs bg-[#2a2e39] text-gray-300 rounded hover:bg-[#3a3e49] transition-colors"
+                  >
+                    短期 (5,10,20)
+                  </button>
+                  <button
+                    onClick={() => setEMAPreset('medium')}
+                    className="px-3 py-1 text-xs bg-[#2a2e39] text-gray-300 rounded hover:bg-[#3a3e49] transition-colors"
+                  >
+                    中期 (30,60)
+                  </button>
+                  <button
+                    onClick={() => setEMAPreset('long')}
+                    className="px-3 py-1 text-xs bg-[#2a2e39] text-gray-300 rounded hover:bg-[#3a3e49] transition-colors"
+                  >
+                    长期 (120,250)
+                  </button>
+                  <button
+                    onClick={() => setEMAPreset('all')}
+                    className="px-3 py-1 text-xs bg-[#2a2e39] text-gray-300 rounded hover:bg-[#3a3e49] transition-colors"
+                  >
+                    全部
+                  </button>
+                </div>
+              </div>
+
+              {/* 自定义选择 */}
+              <div>
+                <div className="text-xs text-gray-400 mb-2">自定义周期</div>
+                <div className="grid grid-cols-3 gap-2">
+                  {[5, 10, 20, 30, 60, 120].map(period => {
+                    const isEnabled = enabledEMAs.includes(period);
+                    const style = getEMAStyle(period);
+                    return (
+                      <button
+                        key={period}
+                        onClick={() => toggleEMA(period)}
+                        className={`px-3 py-2 text-xs rounded transition-colors flex items-center justify-between ${
+                          isEnabled
+                            ? 'bg-[#2a2e39] text-white border border-gray-600'
+                            : 'bg-[#1a1e29] text-gray-400 hover:bg-[#2a2e39]'
+                        }`}
+                      >
+                        <span>EMA{period}</span>
+                        {isEnabled && (
+                          <span
+                            className="w-3 h-3 rounded-full ml-2"
+                            style={{ backgroundColor: style.color }}
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 清除全部 */}
+              <div className="mt-4 pt-3 border-t border-gray-700">
+                <button
+                  onClick={() => {
+                    setEnabledEMAs([]);
+                    setShowEMAConfig(false);
+                  }}
+                  className="w-full px-3 py-1 text-xs bg-red-900/30 text-red-400 rounded hover:bg-red-900/50 transition-colors"
+                >
+                  清除全部
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 图表类型切换 */}
+        <div className="bg-[#131722]/90 rounded flex">
+          <button
+            onClick={() => setChartType('candlestick')}
+            className={`px-3 py-1 text-sm transition-colors rounded-l ${
+              chartType === 'candlestick'
+                ? 'bg-[#2962ff] text-white'
+                : 'text-gray-400 hover:text-white hover:bg-[#2a2e39]'
+            }`}
+            title="蜡烛图"
+          >
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 16 16">
+              <path d="M8 1v2M8 13v2M3 5h2v6H3zM11 3h2v10h-2zM4 6h1v4H4zM12 4h1v8h-1z"/>
+            </svg>
+          </button>
+          <button
+            onClick={() => setChartType('line')}
+            className={`px-3 py-1 text-sm transition-colors rounded-r ${
+              chartType === 'line'
+                ? 'bg-[#2962ff] text-white'
+                : 'text-gray-400 hover:text-white hover:bg-[#2a2e39]'
+            }`}
+            title="线形图"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 16 16" strokeWidth="2">
+              <path d="M2 12L5 8L8 10L14 4" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* MACD 指标开关 */}
+        <button
+          onClick={() => setShowMACD(!showMACD)}
+          className={`bg-[#131722]/90 px-3 py-1 rounded text-sm transition-colors ${
+            showMACD
+              ? 'text-[#2962FF] hover:bg-[#2a2e39]'
+              : 'text-gray-400 hover:text-white hover:bg-[#2a2e39]'
+          }`}
+          title="MACD 指标"
+        >
+          MACD
+        </button>
+
         {/* 重置缩放按钮 */}
         <button
           onClick={handleResetZoom}
@@ -297,39 +602,69 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
         </button>
       </div>
 
-      {/* 图表容器 */}
-      <div ref={containerRef} className="w-full h-full" />
+      {/* 主图表容器 */}
+      <div className="relative w-full" style={{ height: showMACD ? 'calc(100% - 220px)' : '100%' }}>
+        <div ref={containerRef} className="w-full h-full" />
+
+        {/* K线倒计时 */}
+        {chart && lastBarTime > 0 && (
+          <KlineCountdown
+            chart={chart}
+            interval={getCountdownInterval(timeframe)}
+            lastBarTime={lastBarTime}
+            onZero={handleCountdownZero}
+            show={showCountdown}
+          />
+        )}
+      </div>
+
+      {/* MACD 子图 */}
+      {showMACD && macdData.length > 0 && (
+        <div className="w-full border-t border-gray-800">
+          <MACDChart data={macdData} height={200} />
+        </div>
+      )}
 
       {/* 加载状态 */}
-      {loading && (
+      {loadingState.loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-[#0a0e14]/80">
           <div className="text-white">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
-            <p className="mt-4 text-sm">加载图表数据...</p>
+            <p className="mt-4 text-sm">
+              {loadingState.direction === 'historical' ? '加载历史数据...' :
+               loadingState.direction === 'latest' ? '加载最新数据...' :
+               '加载图表数据...'}
+            </p>
           </div>
         </div>
       )}
 
       {/* 错误状态 */}
-      {error && !loading && (
+      {loadingState.error && !loadingState.loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-[#0a0e14]/80">
           <div className="text-center">
             <svg className="w-16 h-16 text-red-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <p className="text-red-500 mb-4">{error}</p>
-            <button
-              onClick={() => setError(null)}
-              className="px-4 py-2 bg-[#2962ff] text-white rounded hover:bg-[#1e53e5] transition-colors"
-            >
-              重试
-            </button>
+            <p className="text-red-500 mb-4">{loadingState.error}</p>
           </div>
         </div>
       )}
 
+      {/* 数据加载边界提示 */}
+      {loadedRange.reachedStart && chartData.length > 0 && (
+        <div className="absolute top-20 left-4 bg-[#131722]/90 px-3 py-1 rounded text-xs text-gray-400">
+          已加载全部历史数据
+        </div>
+      )}
+      {loadedRange.reachedEnd && chartData.length > 0 && (
+        <div className="absolute top-20 right-4 bg-[#131722]/90 px-3 py-1 rounded text-xs text-gray-400">
+          已是最新数据
+        </div>
+      )}
+
       {/* 无数据状态 */}
-      {!assetSymbol && !loading && !error && (
+      {!assetSymbol && !loadingState.loading && !loadingState.error && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="text-center text-gray-500">
             <svg className="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
