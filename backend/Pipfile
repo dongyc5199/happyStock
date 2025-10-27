@@ -8,6 +8,14 @@ psycopg2-binary = "*"
 redis = "*"
 fastapi = "*"
 uvicorn = "*"
+tortoise-orm = "*"
+asyncpg = "*"
+pydantic = {extras = ["email"], version = "*"}
+python-dotenv = "*"
+pydantic-settings = "*"
+# Market data generation dependencies
+numpy = "*"
+sqlalchemy = "*"
 
 [dev-packages]
 
