@@ -55,39 +55,39 @@ export default function TradeHistory({ trades, className = '' }: TradeHistoryPro
   return (
     <div className={`${className}`}>
       {/* 筛选器 */}
-      <div className="bg-[#0a0e14] border border-[#2a2e39] rounded p-4 mb-4 flex space-x-4">
+      <div className="bg-[#0a0e14] border border-[#2a2e39] rounded px-3 py-2 mb-2 flex space-x-3 items-center">
         <input
           type="text"
           value={filterSymbol}
           onChange={(e) => setFilterSymbol(e.target.value)}
           placeholder="搜索股票代码..."
-          className="flex-1 px-3 py-2 bg-[#131722] border border-[#2a2e39] rounded text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="flex-1 px-2 py-1 text-xs bg-[#131722] border border-[#2a2e39] rounded text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
         />
         <select
           value={filterType}
           onChange={(e) => setFilterType(e.target.value as TradeType | 'ALL')}
-          className="px-3 py-2 bg-[#131722] border border-[#2a2e39] rounded text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-2 py-1 text-xs bg-[#131722] border border-[#2a2e39] rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
         >
           <option value="ALL">全部类型</option>
           <option value="BUY">买入</option>
           <option value="SELL">卖出</option>
         </select>
-        <div className="text-gray-400 self-center">
-          共 {filteredTrades.length} 条记录
+        <div className="text-gray-400 text-xs whitespace-nowrap">
+          共 {filteredTrades.length} 条
         </div>
       </div>
 
       {/* 交易列表 */}
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-xs">
           <thead className="bg-[#0a0e14] border-b border-[#2a2e39]">
             <tr>
-              <th className="px-4 py-3 text-left text-gray-400 font-medium">时间</th>
-              <th className="px-4 py-3 text-left text-gray-400 font-medium">股票</th>
-              <th className="px-4 py-3 text-center text-gray-400 font-medium">类型</th>
-              <th className="px-4 py-3 text-right text-gray-400 font-medium">价格</th>
-              <th className="px-4 py-3 text-right text-gray-400 font-medium">数量</th>
-              <th className="px-4 py-3 text-right text-gray-400 font-medium">金额</th>
+              <th className="px-3 py-1.5 text-left text-gray-400 font-medium">时间</th>
+              <th className="px-3 py-1.5 text-left text-gray-400 font-medium">股票</th>
+              <th className="px-3 py-1.5 text-center text-gray-400 font-medium">类型</th>
+              <th className="px-3 py-1.5 text-right text-gray-400 font-medium">价格</th>
+              <th className="px-3 py-1.5 text-right text-gray-400 font-medium">数量</th>
+              <th className="px-3 py-1.5 text-right text-gray-400 font-medium">金额</th>
             </tr>
           </thead>
           <tbody>
@@ -96,16 +96,16 @@ export default function TradeHistory({ trades, className = '' }: TradeHistoryPro
                 key={trade.id}
                 className="border-b border-[#2a2e39] hover:bg-[#1a1e2e] transition-colors"
               >
-                <td className="px-4 py-3 text-gray-400">
+                <td className="px-3 py-1.5 text-gray-400">
                   {formatDateTime(trade.trade_time)}
                 </td>
-                <td className="px-4 py-3">
-                  <div className="font-semibold text-white">{trade.asset_symbol}</div>
+                <td className="px-3 py-1.5">
+                  <div className="font-semibold text-white text-sm">{trade.asset_symbol}</div>
                   <div className="text-xs text-gray-500">{trade.asset_name}</div>
                 </td>
-                <td className="px-4 py-3 text-center">
+                <td className="px-3 py-1.5 text-center">
                   <span
-                    className={`px-2 py-1 rounded text-xs font-semibold ${
+                    className={`px-1.5 py-0.5 rounded text-xs font-semibold ${
                       trade.trade_type === 'BUY'
                         ? 'bg-green-500/20 text-green-500'
                         : 'bg-red-500/20 text-red-500'
@@ -114,11 +114,11 @@ export default function TradeHistory({ trades, className = '' }: TradeHistoryPro
                     {trade.trade_type === 'BUY' ? '买入' : '卖出'}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-right text-white font-mono">
+                <td className="px-3 py-1.5 text-right text-white font-mono">
                   {formatCurrency(trade.price, 2)}
                 </td>
-                <td className="px-4 py-3 text-right text-white font-mono">{trade.quantity}</td>
-                <td className="px-4 py-3 text-right text-white font-mono font-semibold">
+                <td className="px-3 py-1.5 text-right text-white font-mono">{trade.quantity}</td>
+                <td className="px-3 py-1.5 text-right text-white font-mono font-semibold">
                   {formatCurrency(trade.total_amount)}
                 </td>
               </tr>

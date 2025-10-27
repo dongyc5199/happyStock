@@ -92,28 +92,35 @@ export default function MACDChart({ data, className = '', height = 200 }: MACDCh
   useEffect(() => {
     if (!chartRef.current || data.length === 0) return;
 
-    // 清理旧的 series
+    // 清理旧的 series（检查 series 是否仍然有效）
     if (diffSeriesRef.current) {
       try {
-        chartRef.current.removeSeries(diffSeriesRef.current);
+        // 检查 chartRef 是否仍然有效且包含该 series
+        if (chartRef.current && typeof chartRef.current.removeSeries === 'function') {
+          chartRef.current.removeSeries(diffSeriesRef.current);
+        }
       } catch (e) {
-        console.warn('Failed to remove DIFF series:', e);
+        // 忽略错误，series 可能已被移除
       }
       diffSeriesRef.current = null;
     }
     if (deaSeriesRef.current) {
       try {
-        chartRef.current.removeSeries(deaSeriesRef.current);
+        if (chartRef.current && typeof chartRef.current.removeSeries === 'function') {
+          chartRef.current.removeSeries(deaSeriesRef.current);
+        }
       } catch (e) {
-        console.warn('Failed to remove DEA series:', e);
+        // 忽略错误
       }
       deaSeriesRef.current = null;
     }
     if (macdSeriesRef.current) {
       try {
-        chartRef.current.removeSeries(macdSeriesRef.current);
+        if (chartRef.current && typeof chartRef.current.removeSeries === 'function') {
+          chartRef.current.removeSeries(macdSeriesRef.current);
+        }
       } catch (e) {
-        console.warn('Failed to remove MACD series:', e);
+        // 忽略错误
       }
       macdSeriesRef.current = null;
     }

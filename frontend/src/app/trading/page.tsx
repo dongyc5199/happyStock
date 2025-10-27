@@ -46,6 +46,10 @@ export default function TradingPage() {
   } = useTradingStore();
 
   const [activeTab, setActiveTab] = useState<BottomTab>('holdings');
+  const [bottomHeight, setBottomHeight] = useState(192); // 默认 192px (h-48)
+  const [isDragging, setIsDragging] = useState(false);
+  const [isBottomCollapsed, setIsBottomCollapsed] = useState(false);
+  const [savedBottomHeight, setSavedBottomHeight] = useState(192); // 保存展开时的高度
 
   // 初始化数据
   useEffect(() => {
@@ -55,6 +59,42 @@ export default function TradingPage() {
     fetchAssets();
     fetchTradeHistory(1);
   }, []);
+
+  // 处理拖动
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const windowHeight = window.innerHeight;
+      const headerHeight = 56; // 顶部导航栏高度
+      const newBottomHeight = windowHeight - e.clientY;
+
+      // 限制最小和最大高度
+      const minHeight = 100;
+      const maxHeight = windowHeight - headerHeight - 200;
+
+      if (newBottomHeight >= minHeight && newBottomHeight <= maxHeight) {
+        setBottomHeight(newBottomHeight);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging]);
 
   // 选择股票
   const handleSelectStock = (asset: Asset) => {
@@ -66,6 +106,20 @@ export default function TradingPage() {
     const asset = assets.find((a) => a.symbol === holding.asset_symbol);
     if (asset) {
       setSelectedAsset(asset);
+    }
+  };
+
+  // 切换底部区域折叠状态
+  const toggleBottomCollapse = () => {
+    if (isBottomCollapsed) {
+      // 展开：恢复之前的高度
+      setBottomHeight(savedBottomHeight);
+      setIsBottomCollapsed(false);
+    } else {
+      // 收起：保存当前高度，然后设置为最小高度（只显示 tabs 标签）
+      setSavedBottomHeight(bottomHeight);
+      setBottomHeight(40); // 只显示 tabs 栏的高度
+      setIsBottomCollapsed(true);
     }
   };
 
@@ -133,8 +187,24 @@ export default function TradingPage() {
             <CandlestickChart assetSymbol={selectedAsset?.symbol || null} />
           </div>
 
+          {/* 可拖动分隔条 */}
+          <div
+            onMouseDown={handleMouseDown}
+            className={`h-1 bg-[#2a2e39] hover:bg-blue-500 cursor-ns-resize transition-colors relative group ${
+              isDragging ? 'bg-blue-500' : ''
+            }`}
+          >
+            {/* 拖动提示图标 */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-8 h-0.5 bg-gray-600 group-hover:bg-blue-400 transition-colors"></div>
+            </div>
+          </div>
+
           {/* 底部 Tabs 区域 */}
-          <div className="h-80 bg-[#131722] border-t border-[#2a2e39] flex flex-col">
+          <div
+            style={{ height: `${bottomHeight}px` }}
+            className="bg-[#131722] border-t border-[#2a2e39] flex flex-col transition-all duration-300"
+          >
             {/* Tabs 切换 */}
             <div className="flex border-b border-[#2a2e39]">
               <button
@@ -167,20 +237,45 @@ export default function TradingPage() {
               >
                 订单
               </button>
+
+              {/* 收起/展开按钮 */}
+              <button
+                onClick={toggleBottomCollapse}
+                className="ml-auto px-3 py-2 text-gray-400 hover:text-white transition-colors"
+                title={isBottomCollapsed ? '展开' : '收起'}
+              >
+                <svg
+                  className={`w-4 h-4 transition-transform duration-300 ${
+                    isBottomCollapsed ? 'rotate-180' : ''
+                  }`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
+              </button>
             </div>
 
             {/* Tabs 内容 */}
-            <div className="flex-1 p-4 overflow-y-auto">
-              {activeTab === 'holdings' && (
-                <HoldingsList holdings={holdings} onSelectHolding={handleSelectHolding} />
-              )}
-              {activeTab === 'history' && <TradeHistory trades={recentTrades} />}
-              {activeTab === 'orders' && (
-                <div className="flex items-center justify-center h-full text-gray-500">
-                  订单功能即将推出
-                </div>
-              )}
-            </div>
+            {!isBottomCollapsed && (
+              <div className="flex-1 p-2 overflow-y-auto">
+                {activeTab === 'holdings' && (
+                  <HoldingsList holdings={holdings} onSelectHolding={handleSelectHolding} />
+                )}
+                {activeTab === 'history' && <TradeHistory trades={recentTrades} />}
+                {activeTab === 'orders' && (
+                  <div className="flex items-center justify-center h-full text-gray-500">
+                    订单功能即将推出
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </main>
 

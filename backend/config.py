@@ -49,7 +49,12 @@ settings = Settings()
 # Tortoise-ORM 配置
 TORTOISE_ORM = {
     "connections": {
-        "default": settings.DATABASE_URL
+        "default": {
+            "engine": "tortoise.backends.sqlite",
+            "credentials": {
+                "file_path": "db.sqlite3"
+            }
+        }
     },
     "apps": {
         "models": {

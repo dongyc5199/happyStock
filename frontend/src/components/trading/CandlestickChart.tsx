@@ -7,6 +7,7 @@ import { ISeriesApi, CandlestickData, HistogramData, LineData } from 'lightweigh
 import { getKlineData } from '@/lib/api/trading';
 import { calculateEMA, getEMAStyle, EMA_PRESETS } from '@/lib/indicators/ema';
 import MACDChart from './MACDChart';
+import VolumeChart from './VolumeChart';
 import KlineCountdown from './KlineCountdown';
 import { Timeframe as TimeframeType } from '@/lib/utils/timeUtils';
 
@@ -81,6 +82,16 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
   const [showCountdown, setShowCountdown] = useState(true); // 默认显示倒计时
   const [lastBarTime, setLastBarTime] = useState<number>(0); // 最后一根K线的时间戳（秒）
 
+  // 成交量显示和高度配置
+  const [showVolume, setShowVolume] = useState(true); // 默认显示成交量
+  const [volumeHeight, setVolumeHeight] = useState(100); // 默认 100px
+  const [isDraggingVolume, setIsDraggingVolume] = useState(false);
+  const [volumeData, setVolumeData] = useState<Array<{ time: string | number; volume: number; isUp: boolean }>>([]);
+
+  // MACD 高度配置
+  const [macdHeight, setMacdHeight] = useState(200); // 默认 200px
+  const [isDraggingMACD, setIsDraggingMACD] = useState(false);
+
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const lineSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
@@ -132,14 +143,6 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
       }
       lineSeriesRef.current = null;
     }
-    if (volumeSeriesRef.current) {
-      try {
-        chart.removeSeries(volumeSeriesRef.current);
-      } catch (e) {
-        console.warn('Failed to remove volume series:', e);
-      }
-      volumeSeriesRef.current = null;
-    }
     // 清理所有 EMA 线
     emaSeriesRef.current.forEach((series, period) => {
       try {
@@ -153,11 +156,12 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
     console.log('Rendering chart with data:', chartData.length, 'bars');
 
     // 生成成交量数据（使用随机值，因为 chartData 不包含 volume）
-    const volumeData: HistogramData[] = chartData.map((item) => ({
+    const generatedVolumeData = chartData.map((item) => ({
       time: item.time,
-      value: Math.random() * 1000000, // 随机成交量
-      color: item.close >= item.open ? '#26a69a' : '#ef5350',
+      volume: Math.random() * 1000000, // 随机成交量
+      isUp: item.close >= item.open,
     }));
+    setVolumeData(generatedVolumeData);
 
     // 根据 chartType 创建不同的系列
     console.log('Creating chart series, type:', chartType);
@@ -215,34 +219,6 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
       console.error('Error creating chart series:', error);
       console.error('Error stack:', (error as Error).stack);
       console.error('Data that failed:', chartData.slice(0, 5));
-    }
-
-    // 创建成交量系列
-    console.log('Creating volume series...');
-    try {
-      if (!volumeSeriesRef.current && addHistogramSeries) {
-        volumeSeriesRef.current = addHistogramSeries({
-          color: '#26a69a',
-          priceFormat: {
-            type: 'volume',
-          },
-          priceScaleId: '',
-        });
-
-        if (!volumeSeriesRef.current) {
-          throw new Error('Failed to create volume series');
-        }
-        console.log('Volume series created successfully');
-      }
-
-      if (volumeSeriesRef.current) {
-        console.log('Setting volume data...');
-        volumeSeriesRef.current.setData(volumeData);
-        console.log('Volume data set successfully');
-      }
-    } catch (error) {
-      console.error('Error setting volume data:', error);
-      console.error('Data that failed:', volumeData);
     }
 
     // 准备价格数据用于指标计算
@@ -347,6 +323,88 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
     };
     return intervalMap[tf];
   };
+
+  // 处理成交量拖动
+  const volumeDragStartY = useRef<number>(0);
+  const volumeStartHeight = useRef<number>(0);
+
+  const handleVolumeMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    volumeDragStartY.current = e.clientY;
+    volumeStartHeight.current = volumeHeight;
+    setIsDraggingVolume(true);
+  };
+
+  useEffect(() => {
+    if (!isDraggingVolume) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      // 计算鼠标移动的距离（向上为正，向下为负）
+      const deltaY = volumeDragStartY.current - e.clientY;
+      const newHeight = volumeStartHeight.current + deltaY;
+
+      // 限制最小和最大高度
+      const minHeight = 60;
+      const maxHeight = 200;
+
+      if (newHeight >= minHeight && newHeight <= maxHeight) {
+        setVolumeHeight(newHeight);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingVolume(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingVolume, volumeHeight]);
+
+  // 处理 MACD 拖动
+  const macdDragStartY = useRef<number>(0);
+  const macdStartHeight = useRef<number>(0);
+
+  const handleMACDMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    macdDragStartY.current = e.clientY;
+    macdStartHeight.current = macdHeight;
+    setIsDraggingMACD(true);
+  };
+
+  useEffect(() => {
+    if (!isDraggingMACD) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      // 计算鼠标移动的距离（向上为正，向下为负）
+      const deltaY = macdDragStartY.current - e.clientY;
+      const newHeight = macdStartHeight.current + deltaY;
+
+      // 限制最小和最大高度
+      const minHeight = 100;
+      const maxHeight = 300;
+
+      if (newHeight >= minHeight && newHeight <= maxHeight) {
+        setMacdHeight(newHeight);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingMACD(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingMACD, macdHeight]);
 
   // 倒计时归零回调：刷新最新K线数据
   const handleCountdownZero = async () => {
@@ -577,6 +635,19 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
           </button>
         </div>
 
+        {/* 成交量指标开关 */}
+        <button
+          onClick={() => setShowVolume(!showVolume)}
+          className={`bg-[#131722]/90 px-3 py-1 rounded text-sm transition-colors ${
+            showVolume
+              ? 'text-[#26a69a] hover:bg-[#2a2e39]'
+              : 'text-gray-400 hover:text-white hover:bg-[#2a2e39]'
+          }`}
+          title="成交量"
+        >
+          VOL
+        </button>
+
         {/* MACD 指标开关 */}
         <button
           onClick={() => setShowMACD(!showMACD)}
@@ -603,7 +674,12 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
       </div>
 
       {/* 主图表容器 */}
-      <div className="relative w-full" style={{ height: showMACD ? 'calc(100% - 220px)' : '100%' }}>
+      <div
+        className="relative w-full"
+        style={{
+          height: `calc(100% - ${showVolume ? volumeHeight + 4 : 0}px - ${showMACD ? macdHeight + 4 : 0}px)`
+        }}
+      >
         <div ref={containerRef} className="w-full h-full" />
 
         {/* K线倒计时 */}
@@ -618,11 +694,48 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
         )}
       </div>
 
+      {/* 成交量子图 */}
+      {showVolume && volumeData.length > 0 && (
+        <>
+          {/* 可拖动分隔条 */}
+          <div
+            onMouseDown={handleVolumeMouseDown}
+            className={`h-1 bg-[#2a2e39] hover:bg-green-500 cursor-ns-resize transition-colors relative group ${
+              isDraggingVolume ? 'bg-green-500' : ''
+            }`}
+          >
+            {/* 拖动提示图标 */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-8 h-0.5 bg-gray-600 group-hover:bg-green-400 transition-colors"></div>
+            </div>
+          </div>
+
+          <div className="w-full border-t border-gray-800">
+            <VolumeChart data={volumeData} height={volumeHeight} />
+          </div>
+        </>
+      )}
+
       {/* MACD 子图 */}
       {showMACD && macdData.length > 0 && (
-        <div className="w-full border-t border-gray-800">
-          <MACDChart data={macdData} height={200} />
-        </div>
+        <>
+          {/* 可拖动分隔条 */}
+          <div
+            onMouseDown={handleMACDMouseDown}
+            className={`h-1 bg-[#2a2e39] hover:bg-blue-500 cursor-ns-resize transition-colors relative group ${
+              isDraggingMACD ? 'bg-blue-500' : ''
+            }`}
+          >
+            {/* 拖动提示图标 */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-8 h-0.5 bg-gray-600 group-hover:bg-blue-400 transition-colors"></div>
+            </div>
+          </div>
+
+          <div className="w-full border-t border-gray-800">
+            <MACDChart data={macdData} height={macdHeight} />
+          </div>
+        </>
       )}
 
       {/* 加载状态 */}

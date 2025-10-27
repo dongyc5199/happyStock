@@ -25,28 +25,27 @@ export default function StockListItem({ asset, isSelected = false, onClick }: St
   return (
     <button
       onClick={() => onClick(asset)}
-      className={`w-full px-4 py-3 text-left transition-colors border-b border-[#2a2e39] ${
+      className={`w-full px-3 py-2 text-left transition-colors border-b border-[#2a2e39] ${
         isSelected
           ? 'bg-[#2962ff]/20 border-l-4 border-l-[#2962ff]'
           : 'hover:bg-[#1a1e2e] border-l-4 border-l-transparent'
       }`}
     >
-      <div className="flex items-center justify-between mb-1">
-        <div className="flex-1 min-w-0">
-          <div className="font-semibold text-white truncate">{asset.symbol}</div>
-          <div className="text-xs text-gray-500 truncate">{asset.name}</div>
-        </div>
+      {/* 第一行：代码 + 名称 */}
+      <div className="flex items-baseline gap-2 mb-1">
+        <span className="font-semibold text-white text-sm">{asset.symbol}</span>
+        <span className="text-xs text-gray-500 truncate flex-1">{asset.name}</span>
       </div>
 
+      {/* 第二行：价格 + 涨跌幅 */}
       {asset.current_price && (
-        <div className="flex items-center justify-between mt-2">
-          <span className="text-white font-mono text-sm">
+        <div className="flex items-center justify-between">
+          <span className="text-white font-mono text-xs">
             {formatCurrency(currentPrice, 2)}
           </span>
           <div className={`text-xs font-medium ${getProfitColor(change)}`}>
             {change >= 0 ? '+' : ''}
-            {change.toFixed(2)} ({change >= 0 ? '+' : ''}
-            {changePercent.toFixed(2)}%)
+            {changePercent.toFixed(2)}%
           </div>
         </div>
       )}

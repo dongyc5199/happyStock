@@ -581,7 +581,8 @@ export function useChartData({
 
     // 当 symbol 或 interval 变化时重新加载数据
     reload();
-  }, [symbol, interval, chart, enabled, reload]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol, interval, chart, enabled]);
 
   // 监听可见范围变化（T023, T024）
   useEffect(() => {

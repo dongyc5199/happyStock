@@ -45,25 +45,25 @@ export default function HoldingsList({ holdings, onSelectHolding, className = ''
   return (
     <div className={`${className}`}>
       {/* 汇总信息 */}
-      <div className="bg-[#0a0e14] border border-[#2a2e39] rounded p-4 mb-4">
-        <div className="grid grid-cols-4 gap-4 text-sm">
+      <div className="bg-[#0a0e14] border border-[#2a2e39] rounded px-3 py-2 mb-2">
+        <div className="grid grid-cols-4 gap-3 text-xs">
           <div>
-            <div className="text-gray-400 mb-1">总成本</div>
-            <div className="text-white font-mono">{formatCurrency(summary.totalCost)}</div>
+            <div className="text-gray-400 mb-0.5">总成本</div>
+            <div className="text-white font-mono text-sm">{formatCurrency(summary.totalCost)}</div>
           </div>
           <div>
-            <div className="text-gray-400 mb-1">总市值</div>
-            <div className="text-white font-mono">{formatCurrency(summary.totalMarketValue)}</div>
+            <div className="text-gray-400 mb-0.5">总市值</div>
+            <div className="text-white font-mono text-sm">{formatCurrency(summary.totalMarketValue)}</div>
           </div>
           <div>
-            <div className="text-gray-400 mb-1">总盈亏</div>
-            <div className={`font-mono font-semibold ${getProfitColor(summary.totalProfit)}`}>
+            <div className="text-gray-400 mb-0.5">总盈亏</div>
+            <div className={`font-mono font-semibold text-sm ${getProfitColor(summary.totalProfit)}`}>
               {formatCurrency(summary.totalProfit)}
             </div>
           </div>
           <div>
-            <div className="text-gray-400 mb-1">盈亏率</div>
-            <div className={`font-mono font-semibold ${getProfitColor(summary.totalProfit)}`}>
+            <div className="text-gray-400 mb-0.5">盈亏率</div>
+            <div className={`font-mono font-semibold text-sm ${getProfitColor(summary.totalProfit)}`}>
               {summary.totalProfit >= 0 ? '+' : ''}
               {summary.totalProfitRate.toFixed(2)}%
             </div>
@@ -73,16 +73,16 @@ export default function HoldingsList({ holdings, onSelectHolding, className = ''
 
       {/* 持仓列表 */}
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-xs">
           <thead className="bg-[#0a0e14] border-b border-[#2a2e39]">
             <tr>
-              <th className="px-4 py-3 text-left text-gray-400 font-medium">股票</th>
-              <th className="px-4 py-3 text-right text-gray-400 font-medium">数量</th>
-              <th className="px-4 py-3 text-right text-gray-400 font-medium">成本价</th>
-              <th className="px-4 py-3 text-right text-gray-400 font-medium">现价</th>
-              <th className="px-4 py-3 text-right text-gray-400 font-medium">市值</th>
-              <th className="px-4 py-3 text-right text-gray-400 font-medium">盈亏</th>
-              <th className="px-4 py-3 text-right text-gray-400 font-medium">盈亏率</th>
+              <th className="px-3 py-1.5 text-left text-gray-400 font-medium">股票</th>
+              <th className="px-3 py-1.5 text-right text-gray-400 font-medium">数量</th>
+              <th className="px-3 py-1.5 text-right text-gray-400 font-medium">成本价</th>
+              <th className="px-3 py-1.5 text-right text-gray-400 font-medium">现价</th>
+              <th className="px-3 py-1.5 text-right text-gray-400 font-medium">市值</th>
+              <th className="px-3 py-1.5 text-right text-gray-400 font-medium">盈亏</th>
+              <th className="px-3 py-1.5 text-right text-gray-400 font-medium">盈亏率</th>
             </tr>
           </thead>
           <tbody>
@@ -96,24 +96,24 @@ export default function HoldingsList({ holdings, onSelectHolding, className = ''
                   onClick={() => onSelectHolding(holding)}
                   className="border-b border-[#2a2e39] hover:bg-[#1a1e2e] cursor-pointer transition-colors"
                 >
-                  <td className="px-4 py-3">
-                    <div className="font-semibold text-white">{holding.asset_symbol}</div>
+                  <td className="px-3 py-1.5">
+                    <div className="font-semibold text-white text-sm">{holding.asset_symbol}</div>
                     <div className="text-xs text-gray-500">{holding.asset_name}</div>
                   </td>
-                  <td className="px-4 py-3 text-right text-white font-mono">{holding.quantity}</td>
-                  <td className="px-4 py-3 text-right text-white font-mono">
+                  <td className="px-3 py-1.5 text-right text-white font-mono">{holding.quantity}</td>
+                  <td className="px-3 py-1.5 text-right text-white font-mono">
                     {formatCurrency(holding.avg_price, 2)}
                   </td>
-                  <td className="px-4 py-3 text-right text-white font-mono">
+                  <td className="px-3 py-1.5 text-right text-white font-mono">
                     {formatCurrency(holding.current_price, 2)}
                   </td>
-                  <td className="px-4 py-3 text-right text-white font-mono">
+                  <td className="px-3 py-1.5 text-right text-white font-mono">
                     {formatCurrency(holding.market_value)}
                   </td>
-                  <td className={`px-4 py-3 text-right font-mono font-semibold ${getProfitColor(profit)}`}>
+                  <td className={`px-3 py-1.5 text-right font-mono font-semibold ${getProfitColor(profit)}`}>
                     {formatCurrency(profit)}
                   </td>
-                  <td className={`px-4 py-3 text-right font-mono font-semibold ${getProfitColor(profit)}`}>
+                  <td className={`px-3 py-1.5 text-right font-mono font-semibold ${getProfitColor(profit)}`}>
                     {profit >= 0 ? '+' : ''}
                     {profitRate.toFixed(2)}%
                   </td>
