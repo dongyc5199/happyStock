@@ -35,6 +35,15 @@ export function useChart(containerRef: React.RefObject<HTMLDivElement>) {
   const [chart, setChart] = useState<IChartApi | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
 
+  // 手动调整图表尺寸的方法
+  const resizeChart = useCallback(() => {
+    if (containerRef.current && chartRef.current) {
+      const width = containerRef.current.clientWidth;
+      const height = containerRef.current.clientHeight || 500;
+      chartRef.current.applyOptions({ width, height });
+    }
+  }, [containerRef]);
+
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -66,7 +75,7 @@ export function useChart(containerRef: React.RefObject<HTMLDivElement>) {
     chartRef.current = chartInstance;
     setChart(chartInstance);
 
-    // 响应式调整图表尺寸
+    // 响应式调整图表尺寸（仅窗口大小变化）
     const handleResize = () => {
       if (containerRef.current && chartRef.current) {
         chartRef.current.applyOptions({
@@ -76,6 +85,7 @@ export function useChart(containerRef: React.RefObject<HTMLDivElement>) {
       }
     };
 
+    // 监听窗口大小变化
     window.addEventListener('resize', handleResize);
 
     // 清理函数：移除图表实例
@@ -194,6 +204,7 @@ export function useChart(containerRef: React.RefObject<HTMLDivElement>) {
   return {
     chart,
     chartRef, // 也返回 chartRef 以便外部直接访问
+    resizeChart, // 手动调整图表尺寸的方法
     addCandlestickSeries,
     addHistogramSeries,
     addLineSeries,

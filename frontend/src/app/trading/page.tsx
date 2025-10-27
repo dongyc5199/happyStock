@@ -16,7 +16,7 @@
  * └─────────────────────────────────────────────────────────┘
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useTradingStore } from '@/stores/tradingStore';
 import CandlestickChart from '@/components/trading/CandlestickChart';
 import TradePanel from '@/components/trading/TradePanel';
@@ -50,6 +50,9 @@ export default function TradingPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isBottomCollapsed, setIsBottomCollapsed] = useState(false);
   const [savedBottomHeight, setSavedBottomHeight] = useState(192); // 保存展开时的高度
+
+  // 保存图表的 resize 方法
+  const chartResizeRef = useRef<(() => void) | null>(null);
 
   // 初始化数据
   useEffect(() => {
@@ -123,6 +126,18 @@ export default function TradingPage() {
     }
   };
 
+  // 监听收起/展开状态变化，自动调用 resize
+  useEffect(() => {
+    // 延迟调用图表 resize，等待 DOM 更新和过渡动画完成
+    const timer = setTimeout(() => {
+      if (chartResizeRef.current) {
+        chartResizeRef.current();
+      }
+    }, 350); // 等待过渡动画完成（transition-all duration-300 + 50ms 缓冲）
+
+    return () => clearTimeout(timer);
+  }, [isBottomCollapsed]); // 只在收起/展开状态变化时触发，避免拖动时频繁调用
+
   return (
     <div className="h-screen flex flex-col bg-[#0a0e14] text-white">
       {/* 顶部导航栏 */}
@@ -183,8 +198,13 @@ export default function TradingPage() {
         {/* 中间：图表区域 */}
         <main className="flex-1 flex flex-col bg-[#0a0e14]">
           {/* K线图表区域 */}
-          <div className="flex-1">
-            <CandlestickChart assetSymbol={selectedAsset?.symbol || null} />
+          <div className="flex-1 min-h-0">
+            <CandlestickChart
+              assetSymbol={selectedAsset?.symbol || null}
+              onChartReady={(resize) => {
+                chartResizeRef.current = resize;
+              }}
+            />
           </div>
 
           {/* 可拖动分隔条 */}
@@ -203,7 +223,7 @@ export default function TradingPage() {
           {/* 底部 Tabs 区域 */}
           <div
             style={{ height: `${bottomHeight}px` }}
-            className="bg-[#131722] border-t border-[#2a2e39] flex flex-col transition-all duration-300"
+            className="bg-[#131722] border-t border-[#2a2e39] flex flex-col flex-shrink-0 transition-all duration-300"
           >
             {/* Tabs 切换 */}
             <div className="flex border-b border-[#2a2e39]">
@@ -263,19 +283,17 @@ export default function TradingPage() {
             </div>
 
             {/* Tabs 内容 */}
-            {!isBottomCollapsed && (
-              <div className="flex-1 p-2 overflow-y-auto">
-                {activeTab === 'holdings' && (
-                  <HoldingsList holdings={holdings} onSelectHolding={handleSelectHolding} />
-                )}
-                {activeTab === 'history' && <TradeHistory trades={recentTrades} />}
-                {activeTab === 'orders' && (
-                  <div className="flex items-center justify-center h-full text-gray-500">
-                    订单功能即将推出
-                  </div>
-                )}
-              </div>
-            )}
+            <div className={`flex-1 p-2 overflow-y-auto ${isBottomCollapsed ? 'hidden' : ''}`}>
+              {activeTab === 'holdings' && (
+                <HoldingsList holdings={holdings} onSelectHolding={handleSelectHolding} />
+              )}
+              {activeTab === 'history' && <TradeHistory trades={recentTrades} />}
+              {activeTab === 'orders' && (
+                <div className="flex items-center justify-center h-full text-gray-500">
+                  订单功能即将推出
+                </div>
+              )}
+            </div>
           </div>
         </main>
 
