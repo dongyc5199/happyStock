@@ -14,6 +14,10 @@ const apiClient: AxiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  // 减少 keep-alive 连接时间
+  maxRedirects: 5,
+  // 禁用自动重试（避免过多请求）
+  validateStatus: (status) => status >= 200 && status < 300,
 });
 
 // 请求拦截器

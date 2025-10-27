@@ -37,7 +37,7 @@ export default function MACDChart({ data, className = '', height = 200 }: MACDCh
   const [params, setParams] = useState(MACD_PRESETS.classic);
   const [showConfig, setShowConfig] = useState(false);
 
-  // 初始化图表
+  // 初始化图表（仅在组件挂载时创建一次）
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -72,7 +72,6 @@ export default function MACDChart({ data, className = '', height = 200 }: MACDCh
       if (containerRef.current && chartRef.current) {
         chartRef.current.applyOptions({
           width: containerRef.current.clientWidth,
-          height: height,
         });
       }
     };
@@ -86,6 +85,15 @@ export default function MACDChart({ data, className = '', height = 200 }: MACDCh
         chartRef.current = null;
       }
     };
+  }, []); // 空依赖数组，仅在挂载时执行
+
+  // 当高度变化时，更新图表尺寸
+  useEffect(() => {
+    if (chartRef.current) {
+      chartRef.current.applyOptions({
+        height: height,
+      });
+    }
   }, [height]);
 
   // 更新 MACD 数据

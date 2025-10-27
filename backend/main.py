@@ -134,4 +134,6 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=8000,
         reload=settings.DEBUG,
+        timeout_keep_alive=5,  # 减少 keep-alive 超时
+        limit_concurrency=100,  # 限制并发连接数
     )

@@ -327,32 +327,61 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
   // 处理成交量拖动
   const volumeDragStartY = useRef<number>(0);
   const volumeStartHeight = useRef<number>(0);
+  const klineStartHeight = useRef<number>(0);
 
   const handleVolumeMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
     volumeDragStartY.current = e.clientY;
     volumeStartHeight.current = volumeHeight;
+
+    // 记录当前K线区域高度（用于联动）
+    if (containerRef.current) {
+      klineStartHeight.current = containerRef.current.clientHeight;
+    }
+
     setIsDraggingVolume(true);
   };
 
   useEffect(() => {
     if (!isDraggingVolume) return;
 
+    let rafId: number | null = null;
+
     const handleMouseMove = (e: MouseEvent) => {
-      // 计算鼠标移动的距离（向上为正，向下为负）
-      const deltaY = volumeDragStartY.current - e.clientY;
-      const newHeight = volumeStartHeight.current + deltaY;
+      // 使用 requestAnimationFrame 节流，确保每帧只更新一次
+      if (rafId !== null) return;
 
-      // 限制最小和最大高度
-      const minHeight = 60;
-      const maxHeight = 200;
+      rafId = requestAnimationFrame(() => {
+        // 计算鼠标移动的距离（向上为正，向下为负）
+        const deltaY = volumeDragStartY.current - e.clientY;
+        const newVolumeHeight = volumeStartHeight.current + deltaY;
 
-      if (newHeight >= minHeight && newHeight <= maxHeight) {
-        setVolumeHeight(newHeight);
-      }
+        // 限制成交量高度
+        const minVolumeHeight = 60;
+        const maxVolumeHeight = 200;
+
+        // 限制K线最小高度（确保K线区域不会被压缩太小）
+        const minKlineHeight = 200;
+        const newKlineHeight = klineStartHeight.current - deltaY;
+
+        // 只有在两个区域都满足限制时才更新
+        if (
+          newVolumeHeight >= minVolumeHeight &&
+          newVolumeHeight <= maxVolumeHeight &&
+          newKlineHeight >= minKlineHeight
+        ) {
+          setVolumeHeight(Math.round(newVolumeHeight)); // 四舍五入避免小数
+        }
+
+        rafId = null;
+      });
     };
 
     const handleMouseUp = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
       setIsDraggingVolume(false);
     };
 
@@ -360,40 +389,77 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
     document.addEventListener('mouseup', handleMouseUp);
 
     return () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDraggingVolume, volumeHeight]);
+  }, [isDraggingVolume]);
 
   // 处理 MACD 拖动
   const macdDragStartY = useRef<number>(0);
   const macdStartHeight = useRef<number>(0);
+  const volumeStartHeightForMACD = useRef<number>(0);
 
   const handleMACDMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
     macdDragStartY.current = e.clientY;
     macdStartHeight.current = macdHeight;
+    volumeStartHeightForMACD.current = volumeHeight;
     setIsDraggingMACD(true);
   };
 
   useEffect(() => {
     if (!isDraggingMACD) return;
 
+    let rafId: number | null = null;
+
     const handleMouseMove = (e: MouseEvent) => {
-      // 计算鼠标移动的距离（向上为正，向下为负）
-      const deltaY = macdDragStartY.current - e.clientY;
-      const newHeight = macdStartHeight.current + deltaY;
+      // 使用 requestAnimationFrame 节流，确保每帧只更新一次
+      if (rafId !== null) return;
 
-      // 限制最小和最大高度
-      const minHeight = 100;
-      const maxHeight = 300;
+      rafId = requestAnimationFrame(() => {
+        // 计算鼠标移动的距离（向上为正，向下为负）
+        const deltaY = macdDragStartY.current - e.clientY;
+        const newMacdHeight = macdStartHeight.current + deltaY;
 
-      if (newHeight >= minHeight && newHeight <= maxHeight) {
-        setMacdHeight(newHeight);
-      }
+        // 限制MACD高度
+        const minMacdHeight = 100;
+        const maxMacdHeight = 300;
+
+        if (showVolume) {
+          // 如果成交量显示，则MACD增大时成交量减小
+          const newVolumeHeight = volumeStartHeightForMACD.current - deltaY;
+          const minVolumeHeight = 60;
+          const maxVolumeHeight = 200;
+
+          // 只有在两个区域都满足限制时才更新
+          if (
+            newMacdHeight >= minMacdHeight &&
+            newMacdHeight <= maxMacdHeight &&
+            newVolumeHeight >= minVolumeHeight &&
+            newVolumeHeight <= maxVolumeHeight
+          ) {
+            setMacdHeight(Math.round(newMacdHeight)); // 四舍五入避免小数
+            setVolumeHeight(Math.round(newVolumeHeight));
+          }
+        } else {
+          // 如果成交量隐藏，MACD只影响K线区域
+          if (newMacdHeight >= minMacdHeight && newMacdHeight <= maxMacdHeight) {
+            setMacdHeight(Math.round(newMacdHeight));
+          }
+        }
+
+        rafId = null;
+      });
     };
 
     const handleMouseUp = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
       setIsDraggingMACD(false);
     };
 
@@ -401,10 +467,13 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
     document.addEventListener('mouseup', handleMouseUp);
 
     return () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDraggingMACD, macdHeight]);
+  }, [isDraggingMACD, showVolume]);
 
   // 倒计时归零回调：刷新最新K线数据
   const handleCountdownZero = async () => {
@@ -464,7 +533,14 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
   };
 
   return (
-    <div className={`relative h-full w-full ${className}`}>
+    <div
+      className={`relative h-full w-full ${className} ${
+        (isDraggingVolume || isDraggingMACD) ? 'select-none' : ''
+      }`}
+      style={{
+        cursor: isDraggingVolume || isDraggingMACD ? 'ns-resize' : 'default'
+      }}
+    >
       {/* 顶部工具栏 */}
       <div className="absolute top-4 left-4 z-10 flex items-center space-x-4">
         {/* 股票信息 */}
@@ -677,7 +753,8 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
       <div
         className="relative w-full"
         style={{
-          height: `calc(100% - ${showVolume ? volumeHeight + 4 : 0}px - ${showMACD ? macdHeight + 4 : 0}px)`
+          height: `calc(100% - ${showVolume ? volumeHeight + 4 : 0}px - ${showMACD ? macdHeight + 4 : 0}px)`,
+          transition: isDraggingVolume || isDraggingMACD ? 'none' : 'height 0.1s ease-out'
         }}
       >
         <div ref={containerRef} className="w-full h-full" />

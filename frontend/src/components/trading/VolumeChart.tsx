@@ -25,7 +25,7 @@ export default function VolumeChart({ data, className = '', height = 100 }: Volu
   const chartRef = useRef<IChartApi | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
 
-  // 初始化图表
+  // 初始化图表（仅在组件挂载时创建一次）
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -60,7 +60,6 @@ export default function VolumeChart({ data, className = '', height = 100 }: Volu
       if (containerRef.current && chartRef.current) {
         chartRef.current.applyOptions({
           width: containerRef.current.clientWidth,
-          height: height,
         });
       }
     };
@@ -74,6 +73,15 @@ export default function VolumeChart({ data, className = '', height = 100 }: Volu
         chartRef.current = null;
       }
     };
+  }, []); // 空依赖数组，仅在挂载时执行
+
+  // 当高度变化时，更新图表尺寸
+  useEffect(() => {
+    if (chartRef.current) {
+      chartRef.current.applyOptions({
+        height: height,
+      });
+    }
   }, [height]);
 
   // 更新成交量数据
