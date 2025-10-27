@@ -40,8 +40,23 @@ def generate_mock_klines(
     """
     klines = []
 
-    # 根据时间间隔计算数据点数量
-    if interval == "1d":
+    # 根据时间间隔计算数据点数量和时间增量
+    if interval == "5m":
+        delta = timedelta(minutes=5)
+        count = min(int((end_time - start_time).total_seconds() / 300), 500)  # 最多500个数据点
+    elif interval == "15m":
+        delta = timedelta(minutes=15)
+        count = min(int((end_time - start_time).total_seconds() / 900), 500)
+    elif interval == "30m":
+        delta = timedelta(minutes=30)
+        count = min(int((end_time - start_time).total_seconds() / 1800), 500)
+    elif interval == "60m":
+        delta = timedelta(hours=1)
+        count = min(int((end_time - start_time).total_seconds() / 3600), 500)
+    elif interval == "120m":
+        delta = timedelta(hours=2)
+        count = min(int((end_time - start_time).total_seconds() / 7200), 500)
+    elif interval == "1d":
         delta = timedelta(days=1)
         count = min((end_time - start_time).days, 90)  # 最多90天
     elif interval == "1w":
@@ -93,7 +108,10 @@ def generate_mock_klines(
 @router.get("/{symbol}", response_model=SuccessResponse)
 async def get_klines(
     symbol: str,
-    interval: Literal["1d", "1w", "1M"] = Query("1d", description="时间间隔：1d=日K, 1w=周K, 1M=月K"),
+    interval: Literal["5m", "15m", "30m", "60m", "120m", "1d", "1w", "1M"] = Query(
+        "1d",
+        description="时间间隔：5m=5分钟, 15m=15分钟, 30m=30分钟, 60m=60分钟, 120m=120分钟, 1d=日K, 1w=周K, 1M=月K"
+    ),
     limit: int = Query(90, ge=1, le=500, description="返回数据条数")
 ):
     """
@@ -114,7 +132,18 @@ async def get_klines(
         # 计算时间范围
         end_time = datetime.now()
 
-        if interval == "1d":
+        # 根据不同的时间间隔计算起始时间
+        if interval == "5m":
+            start_time = end_time - timedelta(minutes=limit * 5)
+        elif interval == "15m":
+            start_time = end_time - timedelta(minutes=limit * 15)
+        elif interval == "30m":
+            start_time = end_time - timedelta(minutes=limit * 30)
+        elif interval == "60m":
+            start_time = end_time - timedelta(hours=limit)
+        elif interval == "120m":
+            start_time = end_time - timedelta(hours=limit * 2)
+        elif interval == "1d":
             start_time = end_time - timedelta(days=limit)
         elif interval == "1w":
             start_time = end_time - timedelta(weeks=limit)

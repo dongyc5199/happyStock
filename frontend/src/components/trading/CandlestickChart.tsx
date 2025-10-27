@@ -5,7 +5,7 @@ import { useChart } from '@/hooks/useChart';
 import { ISeriesApi, CandlestickData, HistogramData } from 'lightweight-charts';
 import { getKlineData } from '@/lib/api/trading';
 
-type Timeframe = 'D' | 'W' | 'M';
+type Timeframe = '5m' | '15m' | '30m' | '60m' | '120m' | 'D' | 'W' | 'M';
 
 interface CandlestickChartProps {
   assetSymbol: string | null;
@@ -57,25 +57,52 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
 
       try {
         // 将 timeframe 映射到 API interval 参数
-        const intervalMap: Record<Timeframe, '1d' | '1w' | '1M'> = {
+        const intervalMap: Record<Timeframe, '5m' | '15m' | '30m' | '60m' | '120m' | '1d' | '1w' | '1M'> = {
+          '5m': '5m',
+          '15m': '15m',
+          '30m': '30m',
+          '60m': '60m',
+          '120m': '120m',
           'D': '1d',
           'W': '1w',
           'M': '1M',
         };
         const interval = intervalMap[timeframe];
 
+        // 根据时间周期调整数据量
+        const limitMap: Record<Timeframe, number> = {
+          '5m': 200,   // 5分钟：200根 = 约16.7小时
+          '15m': 200,  // 15分钟：200根 = 约2天
+          '30m': 200,  // 30分钟：200根 = 约4天
+          '60m': 200,  // 60分钟：200根 = 约8天
+          '120m': 200, // 120分钟：200根 = 约16天
+          'D': 90,     // 日K：90天
+          'W': 52,     // 周K：52周
+          'M': 24,     // 月K：24个月
+        };
+        const limit = limitMap[timeframe];
+
         // 调用真实 API 获取 K线数据
-        const response = await getKlineData(assetSymbol, interval, 90);
+        const response = await getKlineData(assetSymbol, interval, limit);
         console.log('API Response:', response);
         console.log('First kline:', response.klines[0]);
 
         // 将后端返回的数据转换为 Lightweight Charts 格式
-        // 注意：lightweight-charts 需要时间格式为 YYYY-MM-DD 字符串或 UTC 时间戳（秒）
+        // 注意：lightweight-charts 需要时间格式为 YYYY-MM-DD 字符串（日K及以上）或 UTC 时间戳（秒，分钟K）
         const candlestickData: CandlestickData[] = response.klines
           .map((kline) => {
-            // 将 Unix 时间戳转换为 YYYY-MM-DD 格式
+            // 对于分钟级别，使用时间戳；对于日K及以上，使用日期字符串
+            const isMinuteInterval = ['5m', '15m', '30m', '60m', '120m'].includes(interval);
             const date = new Date(kline.time * 1000);
-            const timeString = date.toISOString().split('T')[0];
+
+            let timeValue: string | number;
+            if (isMinuteInterval) {
+              // 分钟级别：使用 UTC 时间戳（秒）
+              timeValue = kline.time as any;
+            } else {
+              // 日K及以上：使用 YYYY-MM-DD 格式
+              timeValue = date.toISOString().split('T')[0];
+            }
 
             const open = parseFloat(kline.open);
             const high = parseFloat(kline.high);
@@ -84,11 +111,11 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
 
             // 验证 OHLC 数据的有效性：low <= open,close <= high
             if (low > open || low > close || low > high || high < open || high < close) {
-              console.warn('Invalid OHLC data:', { time: timeString, open, high, low, close });
+              console.warn('Invalid OHLC data:', { time: timeValue, open, high, low, close });
             }
 
             return {
-              time: timeString as any, // lightweight-charts 接受 YYYY-MM-DD 格式
+              time: timeValue as any,
               open,
               high,
               low,
@@ -103,11 +130,18 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
         // 生成成交量数据
         const volumeData: HistogramData[] = response.klines
           .map((kline) => {
+            const isMinuteInterval = ['5m', '15m', '30m', '60m', '120m'].includes(interval);
             const date = new Date(kline.time * 1000);
-            const timeString = date.toISOString().split('T')[0];
+
+            let timeValue: string | number;
+            if (isMinuteInterval) {
+              timeValue = kline.time as any;
+            } else {
+              timeValue = date.toISOString().split('T')[0];
+            }
 
             return {
-              time: timeString as any,
+              time: timeValue as any,
               value: kline.volume || 0,
               color: parseFloat(kline.close) >= parseFloat(kline.open) ? '#26a69a' : '#ef5350',
             };
@@ -215,20 +249,40 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
         )}
 
         {/* 时间周期选择器 */}
-        <div className="bg-[#131722]/90 px-2 py-1 rounded flex space-x-1">
-          {(['D', 'W', 'M'] as Timeframe[]).map((tf) => (
-            <button
-              key={tf}
-              onClick={() => handleTimeframeChange(tf)}
-              className={`px-3 py-1 rounded text-sm transition-colors ${
-                timeframe === tf
-                  ? 'bg-[#2962ff] text-white'
-                  : 'text-gray-400 hover:text-white hover:bg-[#2a2e39]'
-              }`}
-            >
-              {tf === 'D' ? '日K' : tf === 'W' ? '周K' : '月K'}
-            </button>
-          ))}
+        <div className="bg-[#131722]/90 px-2 py-1 rounded flex space-x-2">
+          {/* 分钟级别 */}
+          <div className="flex space-x-1 pr-2 border-r border-gray-700">
+            {(['5m', '15m', '30m', '60m', '120m'] as Timeframe[]).map((tf) => (
+              <button
+                key={tf}
+                onClick={() => handleTimeframeChange(tf)}
+                className={`px-2 py-1 rounded text-xs transition-colors ${
+                  timeframe === tf
+                    ? 'bg-[#2962ff] text-white'
+                    : 'text-gray-400 hover:text-white hover:bg-[#2a2e39]'
+                }`}
+              >
+                {tf}
+              </button>
+            ))}
+          </div>
+
+          {/* 日、周、月级别 */}
+          <div className="flex space-x-1">
+            {(['D', 'W', 'M'] as Timeframe[]).map((tf) => (
+              <button
+                key={tf}
+                onClick={() => handleTimeframeChange(tf)}
+                className={`px-3 py-1 rounded text-sm transition-colors ${
+                  timeframe === tf
+                    ? 'bg-[#2962ff] text-white'
+                    : 'text-gray-400 hover:text-white hover:bg-[#2a2e39]'
+                }`}
+              >
+                {tf === 'D' ? '日K' : tf === 'W' ? '周K' : '月K'}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* 重置缩放按钮 */}
