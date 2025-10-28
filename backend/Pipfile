@@ -13,9 +13,9 @@ asyncpg = "*"
 pydantic = {extras = ["email"], version = "*"}
 python-dotenv = "*"
 pydantic-settings = "*"
-# Market data generation dependencies
-numpy = "*"
 sqlalchemy = "*"
+numpy = "*"
+apscheduler = "*"
 
 [dev-packages]
 

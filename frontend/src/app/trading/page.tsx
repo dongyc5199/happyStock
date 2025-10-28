@@ -20,11 +20,11 @@ import { useEffect, useState, useRef } from 'react';
 import { useTradingStore } from '@/stores/tradingStore';
 import CandlestickChart from '@/components/trading/CandlestickChart';
 import TradePanel from '@/components/trading/TradePanel';
-import StockSearch from '@/components/trading/StockSearch';
-import StockListItem from '@/components/trading/StockListItem';
+import VirtualMarketStockList from '@/components/trading/VirtualMarketStockList';
 import HoldingsList from '@/components/trading/HoldingsList';
 import TradeHistory from '@/components/trading/TradeHistory';
 import type { Asset, Holding } from '@/types/trading';
+import type { Stock } from '@/types/virtual-market';
 import { formatCurrency } from '@/lib/utils/format';
 
 type BottomTab = 'holdings' | 'history' | 'orders';
@@ -99,8 +99,22 @@ export default function TradingPage() {
     };
   }, [isDragging]);
 
-  // 选择股票
-  const handleSelectStock = (asset: Asset) => {
+  // 选择虚拟市场股票
+  const handleSelectVirtualStock = (stock: Stock) => {
+    // 将虚拟市场Stock转换为Asset类型
+    const asset: Asset = {
+      id: 0, // 虚拟市场股票没有id，使用0
+      symbol: stock.symbol,
+      name: stock.name,
+      asset_type: 'stock',
+      current_price: stock.current_price.toString(),
+      change_percent: stock.change_pct.toString(),
+      volume: stock.volume,
+      market_cap: stock.market_cap?.toString() || '0',
+      is_active: stock.is_active === 1,
+      created_at: stock.created_at,
+      updated_at: stock.updated_at,
+    };
     setSelectedAsset(asset);
   };
 
@@ -172,27 +186,12 @@ export default function TradingPage() {
 
       {/* 主内容区域 */}
       <div className="flex-1 flex overflow-hidden">
-        {/* 左侧：股票列表 */}
+        {/* 左侧：虚拟市场股票列表 */}
         <aside className="w-64 bg-[#131722] border-r border-[#2a2e39] flex flex-col">
-          {/* 搜索框 */}
-          <div className="p-4 border-b border-[#2a2e39]">
-            <StockSearch onSelectStock={handleSelectStock} />
-          </div>
-
-          {/* 股票列表 */}
-          <div className="flex-1 overflow-y-auto">
-            {assets.map((asset) => (
-              <StockListItem
-                key={asset.id}
-                asset={asset}
-                isSelected={selectedAsset?.id === asset.id}
-                onClick={handleSelectStock}
-              />
-            ))}
-            {assets.length === 0 && !loading && (
-              <div className="p-4 text-center text-gray-500 text-sm">暂无股票数据</div>
-            )}
-          </div>
+          <VirtualMarketStockList
+            onSelectStock={handleSelectVirtualStock}
+            selectedSymbol={selectedAsset?.symbol}
+          />
         </aside>
 
         {/* 中间：图表区域 */}
