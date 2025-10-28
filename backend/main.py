@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 
 from config import settings, TORTOISE_ORM
 from exceptions import TradingException
+from lib.db_manager_sqlite import get_db_manager
 
 
 @asynccontextmanager
@@ -19,10 +20,23 @@ async def lifespan(app: FastAPI):
     """
     # 启动时执行
     print("Starting up...")
-    print(f"Database: {settings.DATABASE_URL}")
+    print(f"Tortoise-ORM Database: {settings.DATABASE_URL}")
+
+    # 初始化虚拟市场数据库连接池 (PostgreSQL)
+    db_manager = get_db_manager()
+    db_manager.initialize()
+
+    # 测试连接
+    if db_manager.health_check():
+        print("[+] Virtual market database connection healthy")
+    else:
+        print("[!] Virtual market database connection failed")
+
     yield
+
     # 关闭时执行
     print("Shutting down...")
+    db_manager.close()
 
 
 # 创建 FastAPI 应用实例
@@ -117,6 +131,10 @@ async def health_check():
 
 # 导入路由
 from routers import accounts, assets, trades, holdings, klines
+from api import stocks as virtual_market_stocks
+from api import indices as virtual_market_indices
+from api import sectors as virtual_market_sectors
+from api import market as virtual_market_market
 
 # 注册 API 路由
 app.include_router(accounts.router, prefix="/api/v1", tags=["账户管理"])
@@ -124,6 +142,12 @@ app.include_router(assets.router, prefix="/api/v1", tags=["资产管理"])
 app.include_router(trades.router, prefix="/api/v1", tags=["交易管理"])
 app.include_router(holdings.router, prefix="/api/v1", tags=["持仓管理"])
 app.include_router(klines.router, prefix="/api/v1", tags=["K线数据"])
+
+# 虚拟市场API路由
+app.include_router(virtual_market_stocks.router, prefix="/api/v1", tags=["虚拟市场-股票"])
+app.include_router(virtual_market_indices.router, prefix="/api/v1", tags=["虚拟市场-指数"])
+app.include_router(virtual_market_sectors.router, prefix="/api/v1", tags=["虚拟市场-板块"])
+app.include_router(virtual_market_market.router, prefix="/api/v1", tags=["虚拟市场-市场"])
 
 
 if __name__ == "__main__":

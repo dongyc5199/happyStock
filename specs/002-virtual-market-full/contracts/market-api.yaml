@@ -1,0 +1,115 @@
+openapi: 3.0.3
+info:
+  title: 虚拟市场 - 市场数据API
+  version: 1.0.0
+  description: 提供板块、市场状态等API接口
+
+servers:
+  - url: http://localhost:8000/api/v1
+
+tags:
+  - name: sectors
+    description: 板块相关操作
+  - name: market
+    description: 市场状态操作
+
+paths:
+  /sectors:
+    get:
+      summary: 获取板块列表
+      tags:
+        - sectors
+      responses:
+        '200':
+          description: 成功返回10大板块
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Sector'
+
+  /sectors/{code}/stocks:
+    get:
+      summary: 获取板块内股票列表
+      tags:
+        - sectors
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功返回板块股票
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    symbol:
+                      type: string
+                    name:
+                      type: string
+                    current_price:
+                      type: number
+                    change_pct:
+                      type: number
+
+  /market/state:
+    get:
+      summary: 获取当前市场状态
+      tags:
+        - market
+      responses:
+        '200':
+          description: 成功返回市场状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketState'
+
+components:
+  schemas:
+    Sector:
+      type: object
+      required:
+        - code
+        - name
+        - avg_change_pct
+      properties:
+        code:
+          type: string
+          example: "TECH"
+        name:
+          type: string
+          example: "科技板块"
+        beta:
+          type: number
+          example: 1.25
+        stock_count:
+          type: integer
+          example: 20
+        avg_change_pct:
+          type: number
+          example: 1.35
+
+    MarketState:
+      type: object
+      properties:
+        state:
+          type: string
+          enum: [BULL, BEAR, SIDEWAYS]
+          example: "BULL"
+        start_time:
+          type: string
+          format: date-time
+        daily_trend:
+          type: number
+          example: 0.005
+        description:
+          type: string
+          example: "科技股领涨的牛市"

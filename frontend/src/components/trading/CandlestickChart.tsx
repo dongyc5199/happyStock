@@ -16,6 +16,7 @@ type Timeframe = '5m' | '15m' | '30m' | '60m' | '120m' | 'D' | 'W' | 'M';
 interface CandlestickChartProps {
   assetSymbol: string | null;
   className?: string;
+  onChartReady?: (resizeChart: () => void) => void; // 传递 resize 方法给父组件
 }
 
 /**
@@ -24,11 +25,18 @@ interface CandlestickChartProps {
  * @param assetSymbol - 股票代码
  * @param className - 自定义样式类名
  */
-export default function CandlestickChart({ assetSymbol, className = '' }: CandlestickChartProps) {
+export default function CandlestickChart({ assetSymbol, className = '', onChartReady }: CandlestickChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { chart, addCandlestickSeries, addHistogramSeries, addLineSeries } = useChart(containerRef);
+  const { chart, resizeChart, addCandlestickSeries, addHistogramSeries, addLineSeries } = useChart(containerRef);
 
   const [timeframe, setTimeframe] = useState<Timeframe>('D');
+
+  // 当图表准备好时，传递 resize 方法给父组件
+  useEffect(() => {
+    if (chart && resizeChart && onChartReady) {
+      onChartReady(resizeChart);
+    }
+  }, [chart, resizeChart, onChartReady]);
 
   // 将 Timeframe 转换为 TimeframeType
   const getIntervalForHook = (tf: Timeframe): TimeframeType => {
@@ -82,15 +90,12 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
   const [showCountdown, setShowCountdown] = useState(true); // 默认显示倒计时
   const [lastBarTime, setLastBarTime] = useState<number>(0); // 最后一根K线的时间戳（秒）
 
-  // 成交量显示和高度配置
+  // 成交量显示配置
   const [showVolume, setShowVolume] = useState(true); // 默认显示成交量
-  const [volumeHeight, setVolumeHeight] = useState(100); // 默认 100px
-  const [isDraggingVolume, setIsDraggingVolume] = useState(false);
   const [volumeData, setVolumeData] = useState<Array<{ time: string | number; volume: number; isUp: boolean }>>([]);
 
-  // MACD 高度配置
-  const [macdHeight, setMacdHeight] = useState(200); // 默认 200px
-  const [isDraggingMACD, setIsDraggingMACD] = useState(false);
+  // MACD 显示配置（移除拖动功能）
+  // 固定高度：成交量 100px，MACD 150px
 
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const lineSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
@@ -324,156 +329,9 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
     return intervalMap[tf];
   };
 
-  // 处理成交量拖动
-  const volumeDragStartY = useRef<number>(0);
-  const volumeStartHeight = useRef<number>(0);
-  const klineStartHeight = useRef<number>(0);
-
-  const handleVolumeMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault();
-    volumeDragStartY.current = e.clientY;
-    volumeStartHeight.current = volumeHeight;
-
-    // 记录当前K线区域高度（用于联动）
-    if (containerRef.current) {
-      klineStartHeight.current = containerRef.current.clientHeight;
-    }
-
-    setIsDraggingVolume(true);
-  };
-
-  useEffect(() => {
-    if (!isDraggingVolume) return;
-
-    let rafId: number | null = null;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      // 使用 requestAnimationFrame 节流，确保每帧只更新一次
-      if (rafId !== null) return;
-
-      rafId = requestAnimationFrame(() => {
-        // 计算鼠标移动的距离（向上为正，向下为负）
-        const deltaY = volumeDragStartY.current - e.clientY;
-        const newVolumeHeight = volumeStartHeight.current + deltaY;
-
-        // 限制成交量高度
-        const minVolumeHeight = 60;
-        const maxVolumeHeight = 200;
-
-        // 限制K线最小高度（确保K线区域不会被压缩太小）
-        const minKlineHeight = 200;
-        const newKlineHeight = klineStartHeight.current - deltaY;
-
-        // 只有在两个区域都满足限制时才更新
-        if (
-          newVolumeHeight >= minVolumeHeight &&
-          newVolumeHeight <= maxVolumeHeight &&
-          newKlineHeight >= minKlineHeight
-        ) {
-          setVolumeHeight(Math.round(newVolumeHeight)); // 四舍五入避免小数
-        }
-
-        rafId = null;
-      });
-    };
-
-    const handleMouseUp = () => {
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
-        rafId = null;
-      }
-      setIsDraggingVolume(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
-      }
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isDraggingVolume]);
-
-  // 处理 MACD 拖动
-  const macdDragStartY = useRef<number>(0);
-  const macdStartHeight = useRef<number>(0);
-  const volumeStartHeightForMACD = useRef<number>(0);
-
-  const handleMACDMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault();
-    macdDragStartY.current = e.clientY;
-    macdStartHeight.current = macdHeight;
-    volumeStartHeightForMACD.current = volumeHeight;
-    setIsDraggingMACD(true);
-  };
-
-  useEffect(() => {
-    if (!isDraggingMACD) return;
-
-    let rafId: number | null = null;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      // 使用 requestAnimationFrame 节流，确保每帧只更新一次
-      if (rafId !== null) return;
-
-      rafId = requestAnimationFrame(() => {
-        // 计算鼠标移动的距离（向上为正，向下为负）
-        const deltaY = macdDragStartY.current - e.clientY;
-        const newMacdHeight = macdStartHeight.current + deltaY;
-
-        // 限制MACD高度
-        const minMacdHeight = 100;
-        const maxMacdHeight = 300;
-
-        if (showVolume) {
-          // 如果成交量显示，则MACD增大时成交量减小
-          const newVolumeHeight = volumeStartHeightForMACD.current - deltaY;
-          const minVolumeHeight = 60;
-          const maxVolumeHeight = 200;
-
-          // 只有在两个区域都满足限制时才更新
-          if (
-            newMacdHeight >= minMacdHeight &&
-            newMacdHeight <= maxMacdHeight &&
-            newVolumeHeight >= minVolumeHeight &&
-            newVolumeHeight <= maxVolumeHeight
-          ) {
-            setMacdHeight(Math.round(newMacdHeight)); // 四舍五入避免小数
-            setVolumeHeight(Math.round(newVolumeHeight));
-          }
-        } else {
-          // 如果成交量隐藏，MACD只影响K线区域
-          if (newMacdHeight >= minMacdHeight && newMacdHeight <= maxMacdHeight) {
-            setMacdHeight(Math.round(newMacdHeight));
-          }
-        }
-
-        rafId = null;
-      });
-    };
-
-    const handleMouseUp = () => {
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
-        rafId = null;
-      }
-      setIsDraggingMACD(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
-      }
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isDraggingMACD, showVolume]);
+  // 固定高度常量
+  const VOLUME_HEIGHT = 100; // 成交量固定高度
+  const MACD_HEIGHT = 150;   // MACD固定高度
 
   // 倒计时归零回调：刷新最新K线数据
   const handleCountdownZero = async () => {
@@ -533,14 +391,7 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
   };
 
   return (
-    <div
-      className={`relative h-full w-full ${className} ${
-        (isDraggingVolume || isDraggingMACD) ? 'select-none' : ''
-      }`}
-      style={{
-        cursor: isDraggingVolume || isDraggingMACD ? 'ns-resize' : 'default'
-      }}
-    >
+    <div className={`relative h-full w-full flex flex-col overflow-hidden ${className}`}>
       {/* 顶部工具栏 */}
       <div className="absolute top-4 left-4 z-10 flex items-center space-x-4">
         {/* 股票信息 */}
@@ -750,13 +601,7 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
       </div>
 
       {/* 主图表容器 */}
-      <div
-        className="relative w-full"
-        style={{
-          height: `calc(100% - ${showVolume ? volumeHeight + 4 : 0}px - ${showMACD ? macdHeight + 4 : 0}px)`,
-          transition: isDraggingVolume || isDraggingMACD ? 'none' : 'height 0.1s ease-out'
-        }}
-      >
+      <div className="relative w-full flex-1 min-h-0">
         <div ref={containerRef} className="w-full h-full" />
 
         {/* K线倒计时 */}
@@ -773,46 +618,16 @@ export default function CandlestickChart({ assetSymbol, className = '' }: Candle
 
       {/* 成交量子图 */}
       {showVolume && volumeData.length > 0 && (
-        <>
-          {/* 可拖动分隔条 */}
-          <div
-            onMouseDown={handleVolumeMouseDown}
-            className={`h-1 bg-[#2a2e39] hover:bg-green-500 cursor-ns-resize transition-colors relative group ${
-              isDraggingVolume ? 'bg-green-500' : ''
-            }`}
-          >
-            {/* 拖动提示图标 */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-8 h-0.5 bg-gray-600 group-hover:bg-green-400 transition-colors"></div>
-            </div>
-          </div>
-
-          <div className="w-full border-t border-gray-800">
-            <VolumeChart data={volumeData} height={volumeHeight} />
-          </div>
-        </>
+        <div className="w-full border-t border-[#2a2e39] flex-shrink-0 overflow-hidden" style={{ height: `${VOLUME_HEIGHT}px` }}>
+          <VolumeChart data={volumeData} height={VOLUME_HEIGHT} />
+        </div>
       )}
 
       {/* MACD 子图 */}
       {showMACD && macdData.length > 0 && (
-        <>
-          {/* 可拖动分隔条 */}
-          <div
-            onMouseDown={handleMACDMouseDown}
-            className={`h-1 bg-[#2a2e39] hover:bg-blue-500 cursor-ns-resize transition-colors relative group ${
-              isDraggingMACD ? 'bg-blue-500' : ''
-            }`}
-          >
-            {/* 拖动提示图标 */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-8 h-0.5 bg-gray-600 group-hover:bg-blue-400 transition-colors"></div>
-            </div>
-          </div>
-
-          <div className="w-full border-t border-gray-800">
-            <MACDChart data={macdData} height={macdHeight} />
-          </div>
-        </>
+        <div className="w-full border-t border-[#2a2e39] flex-shrink-0 overflow-hidden" style={{ height: `${MACD_HEIGHT}px` }}>
+          <MACDChart data={macdData} height={MACD_HEIGHT} />
+        </div>
       )}
 
       {/* 加载状态 */}

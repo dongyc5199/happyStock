@@ -1,0 +1,391 @@
+openapi: 3.0.3
+info:
+  title: 虚拟市场 - 股票API
+  version: 1.0.0
+  description: |
+    提供股票列表、详情、历史K线数据等API接口
+
+servers:
+  - url: http://localhost:8000/api/v1
+    description: 本地开发环境
+  - url: https://api.happystock.com/api/v1
+    description: 生产环境（未来）
+
+tags:
+  - name: stocks
+    description: 股票相关操作
+  - name: klines
+    description: K线数据操作
+
+paths:
+  /stocks:
+    get:
+      summary: 获取股票列表
+      description: 获取所有虚拟股票列表，支持按板块筛选、搜索、排序
+      tags:
+        - stocks
+      parameters:
+        - name: sector
+          in: query
+          description: 板块代码（如TECH, FIN），不传则返回所有板块
+          schema:
+            type: string
+            example: TECH
+        - name: search
+          in: query
+          description: 搜索关键词（股票代码或名称）
+          schema:
+            type: string
+            example: "平安"
+        - name: sort_by
+          in: query
+          description: 排序字段
+          schema:
+            type: string
+            enum: [symbol, current_price, change_pct, volume, market_cap]
+            default: market_cap
+        - name: order
+          in: query
+          description: 排序方向
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: limit
+          in: query
+          description: 返回数量限制
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 100
+        - name: offset
+          in: query
+          description: 偏移量（分页）
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: 成功返回股票列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                    example: 106
+                    description: 总股票数量
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StockSummary'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /stocks/{symbol}:
+    get:
+      summary: 获取股票详情
+      description: 获取单只股票的完整信息，包括实时价格和元数据
+      tags:
+        - stocks
+      parameters:
+        - name: symbol
+          in: path
+          required: true
+          description: 股票代码（6位数字）
+          schema:
+            type: string
+            pattern: '^\d{6}$'
+            example: "600001"
+      responses:
+        '200':
+          description: 成功返回股票详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockDetail'
+        '404':
+          description: 股票不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /stocks/{symbol}/klines:
+    get:
+      summary: 获取股票K线数据
+      description: 获取指定股票的历史K线数据，支持不同时间周期
+      tags:
+        - klines
+      parameters:
+        - name: symbol
+          in: path
+          required: true
+          description: 股票代码
+          schema:
+            type: string
+            pattern: '^\d{6}$'
+            example: "600519"
+        - name: period
+          in: query
+          description: K线周期
+          schema:
+            type: string
+            enum: [1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w, 1M]
+            default: 1d
+        - name: start_time
+          in: query
+          description: 开始时间（Unix时间戳，秒）
+          schema:
+            type: integer
+            example: 1704067200
+        - name: end_time
+          in: query
+          description: 结束时间（Unix时间戳，秒），不传则为当前时间
+          schema:
+            type: integer
+            example: 1711843200
+        - name: limit
+          in: query
+          description: 返回K线数量限制
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2000
+            default: 90
+      responses:
+        '200':
+          description: 成功返回K线数据
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  symbol:
+                    type: string
+                    example: "600519"
+                  period:
+                    type: string
+                    example: "1d"
+                  total:
+                    type: integer
+                    example: 90
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/KLine'
+        '404':
+          description: 股票不存在或无数据
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    StockSummary:
+      type: object
+      description: 股票列表中的简要信息
+      required:
+        - symbol
+        - name
+        - sector_code
+        - sector_name
+        - current_price
+        - change_pct
+      properties:
+        symbol:
+          type: string
+          example: "600001"
+          description: 股票代码
+        name:
+          type: string
+          example: "快乐银行"
+          description: 股票名称
+        sector_code:
+          type: string
+          example: "FIN"
+          description: 板块代码
+        sector_name:
+          type: string
+          example: "金融板块"
+          description: 板块名称
+        current_price:
+          type: number
+          format: decimal
+          example: 15.50
+          description: 当前价格（元）
+        previous_close:
+          type: number
+          format: decimal
+          example: 15.25
+          description: 昨日收盘价
+        change_value:
+          type: number
+          format: decimal
+          example: 0.25
+          description: 涨跌额
+        change_pct:
+          type: number
+          format: decimal
+          example: 1.64
+          description: 涨跌幅（百分比）
+        volume:
+          type: integer
+          format: int64
+          example: 123456789
+          description: 成交量（股）
+        turnover:
+          type: number
+          format: decimal
+          example: 1902345678.50
+          description: 成交额（元）
+        market_cap:
+          type: integer
+          format: int64
+          example: 8000
+          description: 总市值（亿元）
+
+    StockDetail:
+      allOf:
+        - $ref: '#/components/schemas/StockSummary'
+        - type: object
+          required:
+            - metadata
+          properties:
+            metadata:
+              type: object
+              description: 股票元数据
+              properties:
+                market_cap_tier:
+                  type: string
+                  example: "大盘股"
+                  description: 市值等级
+                beta:
+                  type: number
+                  format: decimal
+                  example: 0.75
+                  description: Beta系数
+                volatility:
+                  type: number
+                  format: decimal
+                  example: 0.018
+                  description: 年化波动率
+                outstanding_shares:
+                  type: integer
+                  format: int64
+                  example: 533
+                  description: 流通股本（亿股）
+                listing_date:
+                  type: string
+                  format: date
+                  example: "2024-01-01"
+                  description: 上市日期
+                is_happy300:
+                  type: boolean
+                  example: true
+                  description: 是否HAPPY300成分股
+                weight_in_happy300:
+                  type: number
+                  format: decimal
+                  example: 0.0520
+                  description: 在HAPPY300中的权重
+            indices:
+              type: array
+              description: 所属指数列表
+              items:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: "HAPPY300"
+                  name:
+                    type: string
+                    example: "快乐综合指数"
+                  weight:
+                    type: number
+                    format: decimal
+                    example: 0.0520
+
+    KLine:
+      type: object
+      description: K线数据点
+      required:
+        - timestamp
+        - datetime
+        - open
+        - close
+        - high
+        - low
+        - volume
+      properties:
+        timestamp:
+          type: integer
+          format: int64
+          example: 1704067200
+          description: Unix时间戳（秒）
+        datetime:
+          type: string
+          format: date-time
+          example: "2024-01-01T09:30:00Z"
+          description: 日期时间（ISO 8601格式）
+        open:
+          type: number
+          format: decimal
+          example: 15.20
+          description: 开盘价
+        close:
+          type: number
+          format: decimal
+          example: 15.50
+          description: 收盘价
+        high:
+          type: number
+          format: decimal
+          example: 15.80
+          description: 最高价
+        low:
+          type: number
+          format: decimal
+          example: 15.10
+          description: 最低价
+        volume:
+          type: integer
+          format: int64
+          example: 12345678
+          description: 成交量
+        turnover:
+          type: number
+          format: decimal
+          example: 190234567.50
+          description: 成交额
+        change_pct:
+          type: number
+          format: decimal
+          example: 1.97
+          description: 相对前一周期的涨跌幅
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          example: "STOCK_NOT_FOUND"
+          description: 错误代码
+        message:
+          type: string
+          example: "股票代码不存在"
+          description: 错误描述
+        details:
+          type: object
+          description: 错误详情（可选）

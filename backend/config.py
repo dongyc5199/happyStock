@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
     REDIS_PASSWORD: Optional[str] = None
+    REDIS_URL: Optional[str] = None  # 完整的Redis连接URL (可选)
 
     # JWT配置 (未来用于认证)
     SECRET_KEY: str = "your-secret-key-change-this-in-production"
@@ -36,6 +37,9 @@ class Settings(BaseSettings):
         "http://localhost:3000",  # Next.js 开发服务器
         "http://localhost:8000",  # FastAPI 开发服务器
     ]
+
+    # 虚拟市场配置
+    PRICE_GENERATION_ENABLED: bool = True  # 是否启用价格生成
 
     class Config:
         env_file = ".env"
