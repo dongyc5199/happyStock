@@ -1,0 +1,143 @@
+/**
+ * CollapsibleSection 样式
+ * 
+ * 实现功能:
+ * - 折叠/展开动画
+ * - 平滑过渡效果
+ * - 可访问性支持
+ */
+
+.collapsibleSection {
+  /* 基础布局 */
+  position: relative;
+  width: 100%;
+  
+  /* 性能优化 */
+  contain: layout style;
+}
+
+.header {
+  position: relative;
+  z-index: 1;
+}
+
+.toggleButton {
+  /* 按钮样式重置 */
+  all: unset;
+  
+  /* 布局 */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: var(--spacing-4, 1rem) var(--spacing-6, 1.5rem);
+  
+  /* 视觉样式 */
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-lg, 0.5rem);
+  
+  /* 交互 */
+  cursor: pointer;
+  user-select: none;
+  
+  /* 过渡 */
+  transition: background-color 0.2s ease;
+}
+
+.toggleButton:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.toggleButton:focus {
+  outline: 2px solid var(--color-primary, #3b82f6);
+  outline-offset: 2px;
+}
+
+.toggleButton:focus-visible {
+  outline: 2px solid var(--color-primary, #3b82f6);
+  outline-offset: 2px;
+}
+
+.title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-text-primary, #ffffff);
+}
+
+.icon {
+  font-size: 1rem;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.7));
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 折叠状态 */
+.collapsibleSection.collapsed .content {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.collapsibleSection.collapsed .icon {
+  transform: rotate(0deg);
+}
+
+/* 展开状态 */
+.collapsibleSection.expanded .content {
+  max-height: none;
+  opacity: 1;
+  overflow: visible;
+  pointer-events: auto;
+}
+
+.collapsibleSection.expanded .icon {
+  transform: rotate(180deg);
+}
+
+.content {
+  /* 动画过渡 */
+  transition: 
+    max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  
+  /* 性能优化 */
+  will-change: max-height, opacity;
+}
+
+.contentInner {
+  padding: var(--spacing-6, 1.5rem) var(--spacing-6, 1.5rem) 0;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .toggleButton {
+    padding: var(--spacing-3, 0.75rem) var(--spacing-4, 1rem);
+  }
+  
+  .title {
+    font-size: 1.125rem;
+  }
+  
+  .contentInner {
+    padding: var(--spacing-4, 1rem) var(--spacing-4, 1rem) 0;
+  }
+}
+
+/* 减少动画偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .toggleButton,
+  .icon,
+  .content {
+    transition: none;
+  }
+  
+  .collapsibleSection.collapsed .content {
+    display: none;
+  }
+  
+  .collapsibleSection.expanded .content {
+    display: block;
+  }
+}

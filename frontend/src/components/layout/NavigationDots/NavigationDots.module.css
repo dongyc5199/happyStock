@@ -1,0 +1,145 @@
+/**
+ * NavigationDots 样式
+ * 
+ * 实现功能:
+ * - 固定定位导航点
+ * - 激活状态指示
+ * - 悬停/焦点反馈
+ */
+
+.navigationDots {
+  /* 固定定位 */
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 100;
+  
+  /* 可访问性 */
+  pointer-events: auto;
+}
+
+.navigationDots.right {
+  right: var(--spacing-6, 1.5rem);
+}
+
+.navigationDots.left {
+  left: var(--spacing-6, 1.5rem);
+}
+
+.dotList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-4, 1rem);
+}
+
+.dotItem {
+  margin: 0;
+  padding: 0;
+}
+
+.dot {
+  /* 按钮样式重置 */
+  all: unset;
+  
+  /* 布局 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  
+  /* 交互 */
+  cursor: pointer;
+  
+  /* 可访问性 */
+  position: relative;
+}
+
+.dotInner {
+  /* 点的视觉样式 */
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.4);
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  
+  /* 过渡动画 */
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 悬停状态 */
+.dot:hover .dotInner {
+  background-color: rgba(255, 255, 255, 0.7);
+  border-color: rgba(255, 255, 255, 0.9);
+  transform: scale(1.2);
+}
+
+/* 焦点状态 */
+.dot:focus {
+  outline: 2px solid var(--color-primary, #3b82f6);
+  outline-offset: 4px;
+  border-radius: 50%;
+}
+
+.dot:focus-visible {
+  outline: 2px solid var(--color-primary, #3b82f6);
+  outline-offset: 4px;
+}
+
+/* 激活状态 */
+.dot.active .dotInner {
+  background-color: var(--color-primary, #3b82f6);
+  border-color: var(--color-primary, #3b82f6);
+  transform: scale(1.3);
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.6);
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .navigationDots.right {
+    right: var(--spacing-4, 1rem);
+  }
+  
+  .navigationDots.left {
+    left: var(--spacing-4, 1rem);
+  }
+  
+  .dotInner {
+    width: 10px;
+    height: 10px;
+  }
+  
+  .dot {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+/* 可访问性 - 屏幕阅读器专用 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* 减少动画偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .dotInner {
+    transition: none;
+  }
+  
+  .dot:hover .dotInner,
+  .dot.active .dotInner {
+    transform: none;
+  }
+}

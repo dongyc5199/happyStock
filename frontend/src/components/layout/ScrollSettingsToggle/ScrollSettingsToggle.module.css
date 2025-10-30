@@ -1,0 +1,216 @@
+/**
+ * ScrollSettingsToggle 样式
+ */
+
+.container {
+  z-index: 50;
+}
+
+.fixed {
+  position: fixed;
+  bottom: var(--spacing-6, 1.5rem);
+  right: var(--spacing-6, 1.5rem);
+}
+
+.inline {
+  position: relative;
+}
+
+/* 切换按钮 */
+.toggleButton {
+  all: unset;
+  
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  
+  background-color: white;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.toggleButton:hover {
+  background-color: rgba(59, 130, 246, 0.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.toggleButton:focus {
+  outline: 2px solid var(--color-primary, #3b82f6);
+  outline-offset: 2px;
+}
+
+.icon {
+  width: 24px;
+  height: 24px;
+  color: var(--color-primary, #3b82f6);
+}
+
+/* 设置菜单 */
+.menu {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  right: 0;
+  
+  min-width: 320px;
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  
+  animation: slideUp 0.2s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.menuHeader {
+  padding: var(--spacing-4, 1rem) var(--spacing-5, 1.25rem);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.menuTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text-primary, #111827);
+}
+
+.menuContent {
+  padding: var(--spacing-4, 1rem);
+}
+
+/* 设置项 */
+.settingItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-4, 1rem);
+  padding: var(--spacing-3, 0.75rem);
+  
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.settingItem:hover {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.settingInfo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1, 0.25rem);
+}
+
+.settingLabel {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-primary, #111827);
+}
+
+.settingDescription {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary, #6b7280);
+}
+
+/* 开关 */
+.switch {
+  all: unset;
+  
+  position: relative;
+  width: 44px;
+  height: 24px;
+  
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.switchOff {
+  background-color: #d1d5db;
+}
+
+.switchOn {
+  background-color: var(--color-primary, #3b82f6);
+}
+
+.switchThumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  
+  width: 20px;
+  height: 20px;
+  
+  background-color: white;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  
+  transition: transform 0.2s ease;
+}
+
+.switchOn .switchThumb {
+  transform: translateX(20px);
+}
+
+/* 提示信息 */
+.hint {
+  display: flex;
+  gap: var(--spacing-2, 0.5rem);
+  padding: var(--spacing-3, 0.75rem);
+  margin-top: var(--spacing-3, 0.75rem);
+  
+  background-color: rgba(59, 130, 246, 0.05);
+  border-radius: 8px;
+}
+
+.hintIcon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: var(--color-primary, #3b82f6);
+}
+
+.hintText {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--color-text-secondary, #6b7280);
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .menu {
+    min-width: 280px;
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+}
+
+/* 减少动画偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .menu {
+    animation: none;
+  }
+  
+  .toggleButton,
+  .switch,
+  .switchThumb {
+    transition: none;
+  }
+}
