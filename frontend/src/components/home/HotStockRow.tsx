@@ -54,13 +54,26 @@ export function HotStockRow({
     <Link
       href={`/virtual-market/stocks/${stock.symbol}`}
       className={`
-        flex items-center gap-3 p-3 rounded-lg 
+        relative flex items-center gap-3 p-3 rounded-lg 
         hover:bg-gray-50 dark:hover:bg-gray-700/50 
-        transition-all group
+        hover:shadow-md hover:scale-[1.01]
+        transition-all duration-200 group cursor-pointer
         ${highlightChange ? 'animate-flash' : ''}
         ${isLimitUp ? 'bg-red-50 dark:bg-red-900/20' : ''}
         ${isLimitDown ? 'bg-green-50 dark:bg-green-900/20' : ''}
       `}
+      onClick={() => {
+        // Track click event for analytics (optional)
+        if (typeof window !== 'undefined' && 'gtag' in window) {
+          const gtag = (window as { gtag?: (...args: unknown[]) => void }).gtag;
+          gtag?.('event', 'hot_stock_click', {
+            stock_symbol: stock.symbol,
+            stock_name: stock.name,
+            rank: rank,
+            change_pct: stock.change_pct,
+          });
+        }
+      }}
     >
       {/* Rank */}
       <div className="flex-shrink-0 w-6 text-center">
@@ -119,7 +132,7 @@ export function HotStockRow({
 
       {/* Price and change */}
       <div className="flex-shrink-0 text-right">
-        <FlashChange value={stock.current_price} format={formatPrice}>
+        <FlashChange value={stock.current_price} format={(v) => formatPrice(Number(v))}>
           <div className={`
             font-semibold
             ${isPositive ? 'text-red-600 dark:text-red-400' : ''}

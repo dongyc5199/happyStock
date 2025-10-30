@@ -69,14 +69,38 @@ export function HeroSection({
             <div className="flex flex-col sm:flex-row gap-4 mb-8">
               <Link
                 href={primaryCtaHref}
-                className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-lg transition-colors shadow-lg shadow-blue-500/30"
+                className="group inline-flex items-center justify-center gap-2 px-8 py-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-lg transition-all duration-300 shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 hover:scale-105"
+                onClick={() => {
+                  // Track primary CTA click
+                  if (typeof window !== 'undefined' && 'gtag' in window) {
+                    const gtag = (window as { gtag?: (...args: unknown[]) => void }).gtag;
+                    gtag?.('event', 'cta_click', {
+                      cta_type: 'primary',
+                      cta_location: 'hero_section',
+                      cta_text: '开始体验',
+                      destination: primaryCtaHref,
+                    });
+                  }
+                }}
               >
                 开始体验
-                <ArrowRight className="w-5 h-5" />
+                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform duration-300" />
               </Link>
               <Link
                 href={secondaryCtaHref}
-                className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-lg border-2 border-gray-300 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-400 text-gray-700 dark:text-gray-300 font-semibold text-lg transition-colors"
+                className="group inline-flex items-center justify-center gap-2 px-8 py-4 rounded-lg border-2 border-gray-300 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 font-semibold text-lg transition-all duration-300 hover:shadow-md"
+                onClick={() => {
+                  // Track secondary CTA click
+                  if (typeof window !== 'undefined' && 'gtag' in window) {
+                    const gtag = (window as { gtag?: (...args: unknown[]) => void }).gtag;
+                    gtag?.('event', 'cta_click', {
+                      cta_type: 'secondary',
+                      cta_location: 'hero_section',
+                      cta_text: '了解更多',
+                      destination: secondaryCtaHref,
+                    });
+                  }
+                }}
               >
                 了解更多
               </Link>

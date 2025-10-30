@@ -2,14 +2,47 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { indicesApi, marketApi } from '@/lib/api/virtual-market';
 import type { Index, MarketOverview as MarketOverviewType } from '@/types/virtual-market';
 import { HeroSection } from '@/components/home/HeroSection';
-import { MarketOverview } from '@/components/home/MarketOverview';
-import { HotStockList } from '@/components/home/HotStockList';
 import { Badge } from '@/components/ui/Badge';
 import { FlashChange } from '@/components/ui/FlashChange';
+import {
+  MarketOverviewSkeleton,
+  HotStockListSkeleton,
+  QuickStartGuideSkeleton,
+  FeatureShowcaseSkeleton,
+  EducationFooterSkeleton,
+} from '@/components/ui/Skeleton';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
+
+// Lazy load heavy components with skeleton loading states
+const MarketOverview = dynamic(() => import('@/components/home/MarketOverview').then(mod => ({ default: mod.MarketOverview })), {
+  loading: () => <MarketOverviewSkeleton />,
+  ssr: true,
+});
+
+const HotStockList = dynamic(() => import('@/components/home/HotStockList').then(mod => ({ default: mod.HotStockList })), {
+  loading: () => <HotStockListSkeleton />,
+  ssr: true,
+});
+
+const QuickStartGuide = dynamic(() => import('@/components/home/QuickStartGuide'), {
+  loading: () => <QuickStartGuideSkeleton />,
+  ssr: true,
+});
+
+const FeatureShowcase = dynamic(() => import('@/components/home/FeatureShowcase'), {
+  loading: () => <FeatureShowcaseSkeleton />,
+  ssr: true,
+});
+
+const EducationFooter = dynamic(() => import('@/components/home/EducationFooter'), {
+  loading: () => <EducationFooterSkeleton />,
+  ssr: true,
+});
 
 export default function Home() {
   const [coreIndices, setCoreIndices] = useState<Index[]>([]);
@@ -86,19 +119,39 @@ export default function Home() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12">
 
         {/* Market Overview - US2 */}
-        {marketOverview && <MarketOverview data={marketOverview} loading={loading} />}
+        <ErrorBoundary>
+          {marketOverview && <MarketOverview data={marketOverview} loading={loading} />}
+        </ErrorBoundary>
+
+        {/* Quick Start Guide - US3 */}
+        <ErrorBoundary>
+          <QuickStartGuide />
+        </ErrorBoundary>
+
+        {/* Feature Showcase - US4 */}
+        <ErrorBoundary>
+          <FeatureShowcase />
+        </ErrorBoundary>
+
+        {/* Education Footer - US5 */}
+        <ErrorBoundary>
+          <EducationFooter />
+        </ErrorBoundary>
 
         {/* Hot Stocks and Core Indices - US2 */}
         <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6">
           {/* Hot Stock List - Takes 60% width */}
-          <HotStockList />
+          <ErrorBoundary>
+            <HotStockList />
+          </ErrorBoundary>
 
           {/* Core Indices - Takes 40% width */}
-          <div className="space-y-4">
-            <h3 className="text-2xl font-bold text-gray-900 dark:text-white">核心指数</h3>
-            {/* Vertical stack of index cards */}
+          <ErrorBoundary>
             <div className="space-y-4">
-              {coreIndices.map((index) => {
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white">核心指数</h3>
+              {/* Vertical stack of index cards */}
+              <div className="space-y-4">
+                {coreIndices.map((index) => {
                 const changeValue = index.change_value ?? 0;
                 const changePct = index.change_pct ?? 0;
                 
@@ -177,6 +230,7 @@ export default function Home() {
               )}
             </div>
           </div>
+          </ErrorBoundary>
         </div>
 
         {/* Quick Navigation */}
