@@ -2,12 +2,18 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { indicesApi, marketApi } from '@/lib/api/virtual-market';
-import type { Index, MarketOverview } from '@/types/virtual-market';
+import type { Index, MarketOverview as MarketOverviewType } from '@/types/virtual-market';
+import { HeroSection } from '@/components/home/HeroSection';
+import { MarketOverview } from '@/components/home/MarketOverview';
+import { HotStockList } from '@/components/home/HotStockList';
+import { Badge } from '@/components/ui/Badge';
+import { FlashChange } from '@/components/ui/FlashChange';
 
 export default function Home() {
   const [coreIndices, setCoreIndices] = useState<Index[]>([]);
-  const [marketOverview, setMarketOverview] = useState<MarketOverview | null>(null);
+  const [marketOverview, setMarketOverview] = useState<MarketOverviewType | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -75,110 +81,101 @@ export default function Home() {
       </header>
 
       {/* Hero Section */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="text-center mb-12">
-          <h2 className="text-5xl font-bold text-gray-900 mb-4">
-            学习投资，零风险实战
-          </h2>
-          <p className="text-xl text-gray-600 mb-8">
-            100只虚拟股票 • 3大核心指数 • 10个行业板块 • 实时市场数据
-          </p>
-          <div className="flex justify-center gap-4">
-            <Link
-              href="/virtual-market"
-              className="px-8 py-4 bg-blue-600 text-white rounded-lg font-semibold text-lg hover:bg-blue-700 transition-colors shadow-lg hover:shadow-xl"
-            >
-              进入市场
-            </Link>
-            <Link
-              href="/virtual-market/indices"
-              className="px-8 py-4 bg-white text-blue-600 rounded-lg font-semibold text-lg hover:bg-gray-50 transition-colors border-2 border-blue-600"
-            >
-              查看指数
-            </Link>
-          </div>
-        </div>
+      <HeroSection userCount={15234} />
 
-        {/* Market Overview Stats */}
-        {marketOverview && (
-          <div className="bg-white rounded-xl shadow-lg p-8 mb-12">
-            <h3 className="text-2xl font-bold text-gray-900 mb-6">市场概况</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-6">
-              <div className="text-center">
-                <div className="text-sm text-gray-500 mb-1">总股票数</div>
-                <div className="text-3xl font-bold text-gray-900">{marketOverview.total_stocks}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-sm text-gray-500 mb-1">上涨</div>
-                <div className="text-3xl font-bold text-red-600">{marketOverview.rising}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-sm text-gray-500 mb-1">下跌</div>
-                <div className="text-3xl font-bold text-green-600">{marketOverview.falling}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-sm text-gray-500 mb-1">平盘</div>
-                <div className="text-3xl font-bold text-gray-600">{marketOverview.unchanged}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-sm text-gray-500 mb-1">涨停</div>
-                <div className="text-3xl font-bold text-red-600">{marketOverview.limit_up}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-sm text-gray-500 mb-1">跌停</div>
-                <div className="text-3xl font-bold text-green-600">{marketOverview.limit_down}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-sm text-gray-500 mb-1">市场状态</div>
-                <div className="text-xl font-bold text-blue-600">{marketOverview.market_state}</div>
-              </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12">
+
+        {/* Market Overview - US2 */}
+        {marketOverview && <MarketOverview data={marketOverview} loading={loading} />}
+
+        {/* Hot Stocks and Core Indices - US2 */}
+        <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6">
+          {/* Hot Stock List - Takes 60% width */}
+          <HotStockList />
+
+          {/* Core Indices - Takes 40% width */}
+          <div className="space-y-4">
+            <h3 className="text-2xl font-bold text-gray-900 dark:text-white">核心指数</h3>
+            {/* Vertical stack of index cards */}
+            <div className="space-y-4">
+              {coreIndices.map((index) => {
+                const changeValue = index.change_value ?? 0;
+                const changePct = index.change_pct ?? 0;
+                
+                return (
+                  <Link
+                    key={index.code}
+                    href={`/virtual-market/indices/${index.code}`}
+                    className="block bg-white dark:bg-gray-800 rounded-xl shadow-lg p-5 border border-gray-200 dark:border-gray-700 hover:shadow-xl transition-all duration-200 hover:scale-[1.02]"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-1">
+                          {index.name}
+                        </h4>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 uppercase">
+                          {index.code}
+                        </p>
+                      </div>
+                      <Badge value={changePct} size="md" />
+                    </div>
+                    
+                    <div className="flex items-baseline justify-between">
+                      <div>
+                        <FlashChange value={index.current_value}>
+                          <span className="text-2xl font-bold text-gray-900 dark:text-white">
+                            {index.current_value.toFixed(2)}
+                          </span>
+                        </FlashChange>
+                        <div className="flex items-center gap-2 mt-1">
+                          <FlashChange value={changeValue}>
+                            <span className={`text-sm font-medium ${
+                              changeValue > 0 ? 'text-red-600' : 
+                              changeValue < 0 ? 'text-green-600' : 
+                              'text-gray-500'
+                            }`}>
+                              {changeValue > 0 ? '+' : ''}{changeValue.toFixed(2)}
+                            </span>
+                          </FlashChange>
+                          {changeValue > 0 ? (
+                            <TrendingUp className="w-4 h-4 text-red-600" />
+                          ) : changeValue < 0 ? (
+                            <TrendingDown className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <Minus className="w-4 h-4 text-gray-500" />
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-1.5 px-2 py-1 bg-gray-50 dark:bg-gray-700/50 rounded">
+                        <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                        <span className="text-xs text-gray-600 dark:text-gray-400">实时</span>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+              
+              {loading && (
+                <div className="space-y-4">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-5 border border-gray-200 dark:border-gray-700">
+                      <div className="animate-pulse">
+                        <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-32 mb-2"></div>
+                        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-20 mb-4"></div>
+                        <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-28"></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {!loading && coreIndices.length === 0 && (
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 border border-gray-200 dark:border-gray-700 text-center">
+                  <p className="text-gray-500 dark:text-gray-400">暂无指数数据</p>
+                </div>
+              )}
             </div>
-          </div>
-        )}
-
-        {/* Core Indices */}
-        <div className="mb-12">
-          <h3 className="text-2xl font-bold text-gray-900 mb-6">核心指数</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {coreIndices.map((index) => (
-              <Link
-                key={index.code}
-                href={`/virtual-market/indices`}
-                className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow"
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h4 className="text-lg font-semibold text-gray-900">{index.name}</h4>
-                    <p className="text-sm text-gray-500">{index.code}</p>
-                  </div>
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    index.change_pct > 0 
-                      ? 'bg-red-100 text-red-700' 
-                      : index.change_pct < 0 
-                      ? 'bg-green-100 text-green-700' 
-                      : 'bg-gray-100 text-gray-700'
-                  }`}>
-                    {index.change_pct > 0 ? '+' : ''}{index.change_pct.toFixed(2)}%
-                  </span>
-                </div>
-                <div className="flex items-end justify-between">
-                  <div>
-                    <div className="text-3xl font-bold text-gray-900">
-                      {index.current_value.toFixed(2)}
-                    </div>
-                    <div className={`text-sm mt-1 ${
-                      index.change_pct > 0 ? 'text-red-600' : index.change_pct < 0 ? 'text-green-600' : 'text-gray-600'
-                    }`}>
-                      {index.change_pct > 0 ? '+' : ''}
-                      {((index.current_value * index.change_pct) / 100).toFixed(2)}
-                    </div>
-                  </div>
-                  <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </div>
-              </Link>
-            ))}
           </div>
         </div>
 
