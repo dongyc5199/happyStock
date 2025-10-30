@@ -84,14 +84,30 @@ async def get_stock_detail(symbol: str):
     """
     获取股票详细信息
 
-    包含基本信息和元数据
+    包含基本信息、完整元数据、HAPPY300成分信息和所属指数列表
     """
     try:
-        # 查询股票详细信息
+        # 查询股票详细信息（包含完整元数据）
         query = """
-            SELECT s.*, sm.*
+            SELECT 
+                s.symbol,
+                s.name,
+                s.sector_code,
+                sec.name as sector_name,
+                s.current_price,
+                s.previous_close,
+                s.change_value,
+                s.change_pct,
+                s.is_active,
+                sm.market_cap,
+                sm.market_cap_tier,
+                sm.beta,
+                sm.volatility,
+                sm.outstanding_shares,
+                sm.listing_date
             FROM stocks s
             LEFT JOIN stock_metadata sm ON s.symbol = sm.symbol
+            LEFT JOIN sectors sec ON s.sector_code = sec.code
             WHERE s.symbol = ? AND s.is_active = 1
         """
 
@@ -100,7 +116,37 @@ async def get_stock_detail(symbol: str):
         if not stock:
             return create_error_response("NOT_FOUND", f"Stock {symbol} not found")
 
-        return create_success_response(stock)
+        # 查询该股票所属的所有指数（包括权重）
+        indices_query = """
+            SELECT 
+                ic.index_code,
+                i.name as index_name,
+                ic.weight
+            FROM index_constituents ic
+            LEFT JOIN indices i ON ic.index_code = i.code
+            WHERE ic.stock_symbol = ?
+            ORDER BY ic.weight DESC
+        """
+        
+        indices = db_manager.execute_query(indices_query, (symbol,))
+        
+        # 检查是否为 HAPPY300 成分股
+        is_happy300 = False
+        weight_in_happy300 = None
+        
+        for index in indices:
+            if index['index_code'] == 'HAPPY300':
+                is_happy300 = True
+                weight_in_happy300 = index['weight']
+                break
+        
+        # 构建返回数据
+        result = dict(stock)
+        result['is_happy300'] = is_happy300
+        result['weight_in_happy300'] = weight_in_happy300
+        result['indices'] = indices
+
+        return create_success_response(result)
 
     except Exception as e:
         print(f"[-] Error in get_stock_detail: {e}")

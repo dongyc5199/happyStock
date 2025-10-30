@@ -10,13 +10,16 @@ from contextlib import asynccontextmanager
 from config import settings, TORTOISE_ORM
 from exceptions import TradingException
 from lib.db_manager_sqlite import get_db_manager
+from scheduler.jobs import start_scheduler, shutdown_scheduler
+from lib.websocket_manager import get_connection_manager
+from lib.redis_pubsub import get_redis_pubsub, close_redis_pubsub
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     应用生命周期管理
-    启动时初始化数据库，关闭时清理资源
+    启动时初始化数据库和调度器，关闭时清理资源
     """
     # 启动时执行
     print("Starting up...")
@@ -32,10 +35,45 @@ async def lifespan(app: FastAPI):
     else:
         print("[!] Virtual market database connection failed")
 
+    # 启动定时任务调度器
+    print("[*] Starting price generation scheduler...")
+    start_scheduler()
+    print("[+] Scheduler started successfully")
+    
+    # 初始化 WebSocket 管理器和 Redis Pub/Sub
+    print("[*] Initializing WebSocket manager and Redis Pub/Sub...")
+    try:
+        # 获取 Redis Pub/Sub 实例 (自动连接)
+        pubsub = await get_redis_pubsub()
+        print("[+] Redis Pub/Sub connected")
+        
+        # 启动 WebSocket 心跳检测
+        manager = get_connection_manager()
+        await manager.start_heartbeat_checker()
+        print("[+] WebSocket heartbeat checker started")
+        
+    except Exception as e:
+        print(f"[!] Failed to initialize real-time push: {e}")
+
     yield
 
     # 关闭时执行
     print("Shutting down...")
+    
+    # 停止 WebSocket 心跳检测
+    print("[*] Stopping WebSocket heartbeat checker...")
+    manager = get_connection_manager()
+    await manager.stop_heartbeat_checker()
+    
+    # 关闭 Redis Pub/Sub
+    print("[*] Closing Redis Pub/Sub...")
+    await close_redis_pubsub()
+    
+    # 关闭调度器
+    print("[*] Stopping scheduler...")
+    shutdown_scheduler()
+    
+    # 关闭数据库
     db_manager.close()
 
 
@@ -135,6 +173,7 @@ from api import stocks as virtual_market_stocks
 from api import indices as virtual_market_indices
 from api import sectors as virtual_market_sectors
 from api import market as virtual_market_market
+from api import websocket as websocket_api
 
 # 注册 API 路由
 app.include_router(accounts.router, prefix="/api/v1", tags=["账户管理"])
@@ -148,6 +187,9 @@ app.include_router(virtual_market_stocks.router, prefix="/api/v1", tags=["虚拟
 app.include_router(virtual_market_indices.router, prefix="/api/v1", tags=["虚拟市场-指数"])
 app.include_router(virtual_market_sectors.router, prefix="/api/v1", tags=["虚拟市场-板块"])
 app.include_router(virtual_market_market.router, prefix="/api/v1", tags=["虚拟市场-市场"])
+
+# WebSocket API路由 (实时数据推送)
+app.include_router(websocket_api.router, prefix="/api/v1", tags=["实时数据推送"])
 
 
 if __name__ == "__main__":

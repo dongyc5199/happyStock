@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     # 数据库配置
     # 生产环境使用 PostgreSQL: postgres://postgres:postgres@localhost:5432/fin_tech_mvp
     # 开发环境可使用 SQLite: sqlite://db.sqlite3
+    DB_TYPE: str = "sqlite"  # 数据库类型: sqlite 或 postgresql
     DATABASE_URL: str = "sqlite://db.sqlite3"
 
     # Redis配置

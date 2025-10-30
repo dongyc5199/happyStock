@@ -8,7 +8,6 @@ import {
   ColorType,
   HistogramData,
   HistogramSeries,
-  HistogramSeriesPartialOptions,
 } from 'lightweight-charts';
 
 interface VolumeChartProps {
@@ -109,11 +108,18 @@ export default function VolumeChart({ data, className = '', height = 100 }: Volu
         },
       });
 
-      const volumeData: HistogramData[] = data.map(item => ({
-        time: item.time as any,
-        value: item.volume,
-        color: item.isUp ? '#26a69a' : '#ef5350',
-      }));
+      const volumeData: HistogramData[] = data
+        .map(item => ({
+          time: item.time as any,
+          value: item.volume,
+          color: item.isUp ? '#26a69a' : '#ef5350',
+        }))
+        .sort((a, b) => {
+          // 确保数据按时间升序排列
+          const timeA = typeof a.time === 'string' ? new Date(a.time).getTime() / 1000 : a.time;
+          const timeB = typeof b.time === 'string' ? new Date(b.time).getTime() / 1000 : b.time;
+          return timeA - timeB;
+        });
 
       volumeSeries.setData(volumeData);
       volumeSeriesRef.current = volumeSeries;

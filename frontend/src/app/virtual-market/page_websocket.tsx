@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { MainNav } from '@/components/layout/MainNav';
 import { sectorsApi } from '@/lib/api/virtual-market';
 import type { Sector } from '@/types/virtual-market';
-import { useWebSocketContext, type StockData } from '@/contexts/WebSocketContext';
+import { useWebSocketContext } from '@/contexts/WebSocketContext';
 
 export default function VirtualMarketPage() {
   // WebSocket 实时数据
@@ -17,33 +17,17 @@ export default function VirtualMarketPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
-  const [lastUpdateTime, setLastUpdateTime] = useState<Date | null>(null);
-  const [isMounted, setIsMounted] = useState(false);
-  const [renderKey, setRenderKey] = useState(0); // 强制重新渲染的key
-  const [localStocks, setLocalStocks] = useState<StockData[]>([]); // 本地存储股票数据
+  const [lastUpdateTime, setLastUpdateTime] = useState<Date>(new Date());
   const pageSize = 20;
 
-  // 客户端挂载后才设置初始时间
-  useEffect(() => {
-    setIsMounted(true);
-    setLastUpdateTime(new Date());
-  }, []);
-
-  // 从 WebSocket 数据中获取股票列表并存储到本地state
-  useEffect(() => {
-    if (marketData?.stocks) {
-      setLocalStocks([...marketData.stocks]); // 创建新数组,触发重新渲染
-      setLastUpdateTime(new Date());
-      setLoading(false);
-      setRenderKey(prev => prev + 1);
-    }
+  // 从 WebSocket 数据中获取股票列表 (实时更新)
+  const allStocks = useMemo(() => {
+    if (!marketData?.stocks) return [];
+    return marketData.stocks;
   }, [marketData]);
 
-  // 从本地存储获取股票列表 (实时更新)
-  const allStocks = localStocks;
-
-  // 过滤和分页逻辑 (移除 useMemo,确保实时响应)
-  const filteredStocks = (() => {
+  // 过滤和分页逻辑
+  const filteredStocks = useMemo(() => {
     let result = allStocks;
 
     // 板块筛选
@@ -61,19 +45,19 @@ export default function VirtualMarketPage() {
     }
 
     return result;
-  })();
+  }, [allStocks, selectedSector, searchTerm]);
 
-  // 分页数据 (移除 useMemo,确保实时响应)
-  const paginatedStocks = (() => {
+  // 分页数据
+  const paginatedStocks = useMemo(() => {
     const start = (page - 1) * pageSize;
     const end = start + pageSize;
     return filteredStocks.slice(start, end);
-  })();
+  }, [filteredStocks, page, pageSize]);
 
   const totalPages = Math.ceil(filteredStocks.length / pageSize);
 
-  // 计算市场概览 (从 WebSocket 数据实时计算,移除 useMemo 确保实时更新)
-  const marketOverview = (() => {
+  // 计算市场概览 (从 WebSocket 数据实时计算)
+  const marketOverview = useMemo(() => {
     if (!allStocks.length) return null;
 
     const overview = {
@@ -88,7 +72,15 @@ export default function VirtualMarketPage() {
     };
 
     return overview;
-  })();
+  }, [allStocks, isConnected]);
+
+  // WebSocket 数据更新时触发
+  useEffect(() => {
+    if (marketData) {
+      setLastUpdateTime(new Date());
+      setLoading(false);
+    }
+  }, [marketData]);
 
   // 初始化加载板块数据
   useEffect(() => {
@@ -138,7 +130,7 @@ export default function VirtualMarketPage() {
                 <span>{connectionStatus.text}</span>
               </div>
               <div className="text-sm text-gray-500">
-                最后更新: {isMounted && lastUpdateTime ? lastUpdateTime.toLocaleTimeString('zh-CN') : '--:--:--'}
+                最后更新: {lastUpdateTime.toLocaleTimeString('zh-CN')}
               </div>
               <div className="text-xs text-gray-400 mt-1">
                 推送频率: {throttleDisplay} (自动调整)
@@ -265,11 +257,8 @@ export default function VirtualMarketPage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {paginatedStocks.map((stock, index) => (
-                      <tr 
-                        key={`${stock.symbol}-${renderKey}-${index}`}
-                        className="hover:bg-gray-50 cursor-pointer transition-colors"
-                      >
+                    {paginatedStocks.map((stock) => (
+                      <tr key={stock.symbol} className="hover:bg-gray-50 cursor-pointer transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <Link
                             href={`/virtual-market/${stock.symbol}`}

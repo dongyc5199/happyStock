@@ -12,6 +12,8 @@ Trading Hours (Beijing Time):
 
 import time
 import logging
+import json
+import asyncio
 from datetime import datetime, time as dt_time
 from typing import List, Dict, Optional
 from enum import Enum
@@ -19,13 +21,21 @@ import signal
 import sys
 
 from .price_generator import PriceGenerator, MarketState
+from .db_manager_sqlite import get_db_manager
 from .db_models import (
-    get_db_manager,
     DatabaseManager,
     StockState,
     StockMetadata,
     MarketStatus,
 )
+
+# Import Redis for publishing
+try:
+    import redis.asyncio as redis
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+    logger.warning("redis.asyncio not available, real-time push disabled")
 
 # Configure logging
 logging.basicConfig(
@@ -68,6 +78,7 @@ class MarketDataGenerator:
         self,
         db_manager: Optional[DatabaseManager] = None,
         test_mode: bool = False,
+        redis_url: str = "redis://localhost:6379/0",
     ):
         """
         Initialize market data generator.
@@ -75,6 +86,7 @@ class MarketDataGenerator:
         Args:
             db_manager: Database manager instance (uses default if None)
             test_mode: If True, runs continuously without time checks
+            redis_url: Redis connection URL for real-time push
         """
         self.db = db_manager or get_db_manager()
         self.test_mode = test_mode
@@ -82,6 +94,10 @@ class MarketDataGenerator:
         self.stocks: List[StockMetadata] = []
         self.stock_states: Dict[str, dict] = {}
         self.generators: Dict[str, PriceGenerator] = {}
+        
+        # Redis for real-time push
+        self.redis_url = redis_url
+        self.redis_client: Optional[redis.Redis] = None
 
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -102,26 +118,31 @@ class MarketDataGenerator:
         Returns:
             Tuple of (is_trading, current_session)
         """
-        if self.test_mode:
-            return True, TradingSession.MORNING
-
-        now = datetime.now()
-
-        # Check if weekend
-        if now.weekday() >= 5:  # Saturday = 5, Sunday = 6
-            return False, TradingSession.CLOSED
-
-        current_time = now.time()
-
-        # Check morning session
-        if self.MORNING_START <= current_time <= self.MORNING_END:
-            return True, TradingSession.MORNING
-
-        # Check afternoon session
-        if self.AFTERNOON_START <= current_time <= self.AFTERNOON_END:
-            return True, TradingSession.AFTERNOON
-
-        return False, TradingSession.CLOSED
+        # 全天交易模式: 始终返回交易中
+        # 注释原有的时间检查逻辑,改为全天交易
+        return True, TradingSession.MORNING
+        
+        # 原有逻辑 (已禁用):
+        # if self.test_mode:
+        #     return True, TradingSession.MORNING
+        # 
+        # now = datetime.now()
+        # 
+        # # Check if weekend
+        # if now.weekday() >= 5:  # Saturday = 5, Sunday = 6
+        #     return False, TradingSession.CLOSED
+        # 
+        # current_time = now.time()
+        # 
+        # # Check morning session
+        # if self.MORNING_START <= current_time <= self.MORNING_END:
+        #     return True, TradingSession.MORNING
+        # 
+        # # Check afternoon session
+        # if self.AFTERNOON_START <= current_time <= self.AFTERNOON_END:
+        #     return True, TradingSession.AFTERNOON
+        # 
+        # return False, TradingSession.CLOSED
 
     def load_stocks(self):
         """Load active stocks from database"""
@@ -250,6 +271,81 @@ class MarketDataGenerator:
                 market_state=state["market_state"].value,
                 timestamp=timestamp,
             )
+        
+        # Publish to Redis for real-time push (POC)
+        if REDIS_AVAILABLE and self.redis_client:
+            asyncio.create_task(self._publish_market_data(timestamp, klines_to_insert))
+    
+    async def _publish_market_data(self, timestamp: int, klines: List[dict]):
+        """
+        Publish market data to Redis channels
+        
+        Args:
+            timestamp: Unix timestamp
+            klines: List of K-line data dictionaries
+        """
+        try:
+            # 准备市场数据 (所有股票)
+            stocks_data = []
+            
+            for kline_data in klines:
+                symbol = kline_data["symbol"]
+                
+                # 找到对应的股票元数据
+                stock_meta = next((s for s in self.stocks if s.symbol == symbol), None)
+                if not stock_meta:
+                    continue
+                
+                # 计算涨跌
+                open_price = kline_data["open"]
+                close_price = kline_data["close"]
+                change = close_price - open_price
+                change_percent = (change / open_price) * 100 if open_price > 0 else 0
+                
+                stock_info = {
+                    "symbol": symbol,
+                    "name": stock_meta.name,
+                    "price": round(close_price, 2),
+                    "open": round(open_price, 2),
+                    "high": round(kline_data["high"], 2),
+                    "low": round(kline_data["low"], 2),
+                    "volume": kline_data["volume"],
+                    "change": round(change, 2),
+                    "change_percent": round(change_percent, 2),
+                    "timestamp": timestamp,
+                }
+                
+                stocks_data.append(stock_info)
+                
+                # 发布单个股票数据到专属频道
+                stock_message = {
+                    "type": "stock_update",
+                    "data": stock_info,
+                }
+                
+                await self.redis_client.publish(
+                    f"market:stock:{symbol}",
+                    json.dumps(stock_message, ensure_ascii=False),
+                )
+            
+            # 发布全市场数据
+            market_message = {
+                "type": "market_update",
+                "data": {
+                    "timestamp": timestamp,
+                    "stocks": stocks_data,
+                }
+            }
+            
+            await self.redis_client.publish(
+                "market:stocks",
+                json.dumps(market_message, ensure_ascii=False),
+            )
+            
+            logger.debug(f"Published {len(stocks_data)} stocks to Redis")
+            
+        except Exception as e:
+            logger.error(f"Failed to publish to Redis: {e}", exc_info=True)
 
     def update_market_status(self, is_trading: bool, session: TradingSession):
         """Update global market status"""
@@ -277,6 +373,34 @@ class MarketDataGenerator:
         """
         self.running = True
         logger.info("MarketDataGenerator started")
+        
+        # Initialize Redis connection
+        if REDIS_AVAILABLE:
+            try:
+                # 创建事件循环 (如果不存在)
+                try:
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                
+                # 异步初始化 Redis 客户端
+                async def init_redis():
+                    self.redis_client = await redis.from_url(
+                        self.redis_url,
+                        encoding="utf-8",
+                        decode_responses=True,
+                    )
+                    await self.redis_client.ping()
+                    logger.info("Connected to Redis for real-time push")
+                
+                loop.run_until_complete(init_redis())
+                
+            except Exception as e:
+                logger.warning(f"Failed to connect to Redis: {e}. Real-time push disabled.")
+                self.redis_client = None
+        else:
+            logger.warning("Redis not available. Real-time push disabled.")
 
         # Load stocks and states
         self.load_stocks()

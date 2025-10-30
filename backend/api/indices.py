@@ -15,7 +15,7 @@ db_manager = get_db_manager()
 
 @router.get("/indices", response_model=None)
 async def get_indices(
-    index_type: Optional[str] = Query(None, description="指数类型筛选 (CORE/SECTOR)"),
+    index_type: Optional[str] = None,
 ):
     """
     获取指数列表
@@ -23,6 +23,9 @@ async def get_indices(
     支持按类型筛选：
     - CORE: 核心指数（沪深300、上证50等）
     - SECTOR: 板块指数
+    
+    Args:
+        index_type: 指数类型筛选 (CORE/SECTOR)
     """
     try:
         # 构建查询
@@ -77,8 +80,8 @@ async def get_index_detail(code: str):
         constituents_query = """
             SELECT ic.*, s.name as stock_name, s.current_price
             FROM index_constituents ic
-            LEFT JOIN stocks s ON ic.symbol = s.symbol
-            WHERE ic.code = ?
+            LEFT JOIN stocks s ON ic.stock_symbol = s.symbol
+            WHERE ic.index_code = ? AND ic.is_active = 1
             ORDER BY ic.weight DESC
         """
 
