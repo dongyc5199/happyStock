@@ -272,7 +272,7 @@ export default function VirtualMarketPage() {
                       >
                         <td className="px-6 py-4 whitespace-nowrap">
                           <Link
-                            href={`/virtual-market/${stock.symbol}`}
+                            href={`/virtual-market/stocks/${stock.symbol}`}
                             className="text-blue-600 hover:text-blue-800 font-medium"
                           >
                             {stock.symbol}

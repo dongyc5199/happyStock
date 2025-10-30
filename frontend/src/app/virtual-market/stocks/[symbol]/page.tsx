@@ -3,7 +3,14 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { MainNav } from '@/components/layout/MainNav';
+
+// 动态导入K线图组件(避免SSR问题)
+const CandlestickChart = dynamic(
+  () => import('@/components/trading/CandlestickChart'),
+  { ssr: false }
+);
 
 interface StockDetail {
   symbol: string;
@@ -168,8 +175,18 @@ export default function StockDetailPage() {
           )}
         </div>
 
+        {/* 价格走势图 - 添加时间轴 */}
+        <div className="bg-white rounded-lg shadow-lg overflow-hidden mb-6">
+          <div className="p-4 border-b border-gray-200">
+            <h2 className="text-xl font-bold text-gray-900">价格走势</h2>
+          </div>
+          <div className="w-full" style={{ height: '500px' }}>
+            <CandlestickChart assetSymbol={stock.symbol} />
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* 左侧：元数据 - T094 */}
+          {/* 左侧:元数据 - T094 */}
           <div className="lg:col-span-2 space-y-6">
             {/* 基本信息卡片 */}
             <div className="bg-white rounded-lg shadow p-6">
