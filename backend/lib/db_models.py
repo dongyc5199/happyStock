@@ -120,28 +120,69 @@ class StockRealtimePrice(Base):
     updated_at = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
 
 
-class StockMetadata(Base):
-    """Static stock metadata"""
+class Stock(Base):
+    """Stock basic info and current trading data"""
 
-    __tablename__ = "stock_metadata"
+    __tablename__ = "stocks"
 
     symbol = Column(String(20), primary_key=True)
     name = Column(String(100), nullable=False)
-    sector = Column(String(50))
-    base_price = Column(Numeric(10, 2), nullable=False)
-    base_volatility = Column(Numeric(6, 4), default=0.02)
-    is_active = Column(Boolean, default=True)
+    sector_code = Column(String(20))
+    current_price = Column(Numeric(10, 2))
+    previous_close = Column(Numeric(10, 2))
+    change_value = Column(Numeric(10, 2))
+    change_pct = Column(Numeric(6, 3))
+    volume = Column(BigInteger)
+    turnover = Column(Numeric(20, 2))
+    is_active = Column(Integer, default=1)
     created_at = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
+    updated_at = Column(TIMESTAMP)
 
     def to_dict(self) -> dict:
         """Convert to dictionary"""
         return {
             "symbol": self.symbol,
             "name": self.name,
-            "sector": self.sector,
-            "base_price": float(self.base_price),
-            "base_volatility": float(self.base_volatility),
-            "is_active": self.is_active,
+            "sector_code": self.sector_code,
+            "current_price": float(self.current_price) if self.current_price else None,
+            "previous_close": float(self.previous_close) if self.previous_close else None,
+            "change_value": float(self.change_value) if self.change_value else None,
+            "change_pct": float(self.change_pct) if self.change_pct else None,
+            "volume": self.volume,
+            "turnover": float(self.turnover) if self.turnover else None,
+            "is_active": bool(self.is_active),
+        }
+
+
+class StockMetadata(Base):
+    """Static stock metadata"""
+
+    __tablename__ = "stock_metadata"
+
+    symbol = Column(String(20), primary_key=True)
+    market_cap = Column(BigInteger)
+    market_cap_tier = Column(String(20))
+    beta = Column(Numeric(6, 4))
+    volatility = Column(Numeric(6, 4))
+    outstanding_shares = Column(BigInteger)
+    listing_date = Column(String(20))
+    is_happy300 = Column(Integer)
+    weight_in_happy300 = Column(Numeric(8, 6))
+    created_at = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
+    updated_at = Column(TIMESTAMP)
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary"""
+        return {
+            "symbol": self.symbol,
+            "market_cap": self.market_cap,
+            "market_cap_tier": self.market_cap_tier,
+            "beta": float(self.beta) if self.beta else None,
+            "volatility": float(self.volatility) if self.volatility else None,
+            "outstanding_shares": self.outstanding_shares,
+            "listing_date": self.listing_date,
+            "is_happy300": bool(self.is_happy300),
+            "weight_in_happy300": float(self.weight_in_happy300) if self.weight_in_happy300 else None,
         }
 
 
@@ -344,9 +385,50 @@ class DatabaseManager:
             session.commit()
 
     def get_active_stocks(self) -> List[StockMetadata]:
-        """Get all active stocks"""
+        """Get all active stocks with combined data from stocks and stock_metadata tables"""
         with self.get_session() as session:
-            return session.query(StockMetadata).filter_by(is_active=True).all()
+            # Query both tables and join them
+            query = (
+                session.query(
+                    Stock.symbol,
+                    Stock.name,
+                    Stock.sector_code,
+                    Stock.current_price,
+                    Stock.is_active,
+                    StockMetadata.volatility,
+                    StockMetadata.beta,
+                )
+                .outerjoin(StockMetadata, Stock.symbol == StockMetadata.symbol)
+                .filter(Stock.is_active == 1)
+            )
+
+            results = query.all()
+
+            # Create combined objects with necessary attributes
+            stocks = []
+            for row in results:
+                # Create a simple object to hold the combined data
+                class CombinedStock:
+                    def __init__(self, symbol, name, sector, price, volatility, beta):
+                        self.symbol = symbol
+                        self.name = name
+                        self.sector = sector
+                        self.base_price = price or 10.0  # Default if None
+                        self.base_volatility = volatility or 0.02  # Default 2%
+                        self.beta = beta or 1.0
+                        self.is_active = True
+
+                stock = CombinedStock(
+                    symbol=row.symbol,
+                    name=row.name,
+                    sector=row.sector_code,
+                    price=float(row.current_price) if row.current_price else None,
+                    volatility=float(row.volatility) if row.volatility else None,
+                    beta=float(row.beta) if row.beta else None,
+                )
+                stocks.append(stock)
+
+            return stocks
 
     def close(self):
         """Close database engine and connections"""

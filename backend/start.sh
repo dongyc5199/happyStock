@@ -28,6 +28,19 @@ if ! pipenv --venv &> /dev/null; then
     fi
 fi
 
+echo ""
+echo "[INFO] 检查 Redis 服务..."
+if ! redis-cli ping &> /dev/null; then
+    echo "[WARNING] Redis 未启动"
+    echo ""
+    echo "WebSocket 实时推送需要 Redis 支持"
+    echo "请启动 Redis 或按 Enter 继续 (不使用实时推送)"
+    echo ""
+    read -r
+else
+    echo "[OK] Redis 服务运行中"
+fi
+
 # 检查数据库文件
 if [ ! -f "db.sqlite3" ]; then
     echo "[INFO] 数据库文件不存在，首次启动会自动创建"

@@ -34,6 +34,23 @@ if ! command -v pipenv &> /dev/null; then
 fi
 echo "[OK] pipenv 已安装"
 
+# 检查 Redis
+echo "[INFO] 检查 Redis 服务..."
+if ! redis-cli ping &> /dev/null; then
+    echo "[WARNING] Redis 未启动或未安装"
+    echo ""
+    echo "WebSocket 实时推送功能需要 Redis 支持"
+    echo "请先启动 Redis 服务:"
+    echo "  - Linux: sudo systemctl start redis"
+    echo "  - Mac: brew services start redis"
+    echo "  - Docker: docker run -d -p 6379:6379 redis"
+    echo ""
+    echo "按 Enter 继续启动 (不使用实时推送)，或 Ctrl+C 取消"
+    read -r
+else
+    echo "[OK] Redis 服务运行中"
+fi
+
 echo ""
 echo "[2/4] 检查项目依赖..."
 echo ""
