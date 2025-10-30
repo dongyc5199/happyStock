@@ -11,6 +11,18 @@
 
 ## 🚀 快速启动
 
+### 前置要求
+1. **Redis** (实时推送必需)
+   ```bash
+   # 快速启动 Redis (Docker 方式)
+   ./start_redis.bat      # Windows
+   ./start_redis.sh       # Linux/Mac
+   
+   # 或参考: REDIS_SETUP.md
+   ```
+
+2. **Node.js** (前端) + **Python 3.13+** (后端)
+
 ### Windows 用户
 ```batch
 # 一键启动（推荐）
@@ -35,7 +47,7 @@ cd frontend && start.bat
 - **后端 API**: http://localhost:8000
 - **API 文档**: http://localhost:8000/docs
 
-📖 **详细启动指南**: [STARTUP.md](STARTUP.md) | **快速参考**: [QUICKSTART.md](QUICKSTART.md)
+📖 **详细启动指南**: [STARTUP.md](STARTUP.md) | **快速参考**: [QUICKSTART.md](QUICKSTART.md) | **Redis 安装**: [REDIS_SETUP.md](REDIS_SETUP.md)
 
 ---
 
