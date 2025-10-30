@@ -193,39 +193,41 @@
 
 ---
 
-## Phase 6: User Story 4 - 获取实时更新的市场数据 (Priority: P2)
+## Phase 6: User Story 4 - 获取实时更新的市场数据 (Priority: P2) ✅
 
 **Goal**: 市场数据每分钟自动更新，用户无需刷新页面即可看到价格变化
 
 **Independent Test**: 打开股票列表或指数看板，等待1-2分钟，观察数据自动刷新（价格、涨跌幅变化）
 
+**Status**: ✅ 已完成 (2025-10-29)
+
 ### Implementation for User Story 4
 
 #### Backend - 定时任务调度
 
-- [ ] T076 [US4] Implement scheduler setup in `backend/scheduler/jobs.py` (APScheduler AsyncIOScheduler)
-- [ ] T077 [US4] Create generate_prices_job in `backend/scheduler/jobs.py` (runs every 1 minute)
-- [ ] T078 [US4] Call price_generator.generate_all_stocks() in generate_prices_job
-- [ ] T079 [US4] Call index_calculator.calculate_all_indices() in generate_prices_job
-- [ ] T080 [US4] Start scheduler on FastAPI startup in `backend/main.py` (@app.on_event("startup"))
-- [ ] T081 [US4] Shutdown scheduler gracefully in `backend/main.py` (@app.on_event("shutdown"))
+- [x] T076 [US4] Implement scheduler setup in `backend/scheduler/jobs.py` (APScheduler AsyncIOScheduler) ✅
+- [x] T077 [US4] Create generate_prices_job in `backend/scheduler/jobs.py` (runs every 1 minute) ✅
+- [x] T078 [US4] Call price_generator.generate_all_stocks() in generate_prices_job ✅
+- [x] T079 [US4] Call index_calculator.calculate_all_indices() in generate_prices_job ✅
+- [x] T080 [US4] Start scheduler on FastAPI startup in `backend/main.py` (@app.on_event("startup")) ✅
+- [x] T081 [US4] Shutdown scheduler gracefully in `backend/main.py` (@app.on_event("shutdown")) ✅
 
 #### Backend - 批量价格生成优化
 
-- [ ] T082 [US4] Implement generate_all_stocks method in `backend/lib/price_generator.py` (vectorized with numpy for 106 stocks)
-- [ ] T083 [US4] Implement calculate_all_indices method in `backend/lib/index_calculator.py` (calculate 13 indices)
-- [ ] T084 [US4] Batch insert new price_data records in `backend/lib/price_generator.py` (use executemany for performance)
-- [ ] T085 [US4] Update stocks table current_price and change_pct after generation in `backend/lib/price_generator.py`
+- [x] T082 [US4] Implement generate_all_stocks method in `backend/scheduler/jobs.py` (batch update 100 stocks) ✅
+- [x] T083 [US4] Implement calculate_all_indices method in `backend/scheduler/jobs.py` (calculate 13 indices) ✅
+- [x] T084 [US4] Batch insert new price_data records in `backend/scheduler/jobs.py` (use executemany for performance) ✅
+- [x] T085 [US4] Update stocks table current_price and change_pct after generation in `backend/scheduler/jobs.py` ✅
 
 #### Frontend - 自动刷新机制
 
-- [ ] T086 [US4] Implement auto-refresh with setInterval (60 seconds) in `frontend/src/app/stocks/page.tsx`
-- [ ] T087 [US4] Implement auto-refresh for index dashboard in `frontend/src/app/indices/page.tsx`
-- [ ] T088 [US4] Add loading indicator during data fetch in stock list page
-- [ ] T089 [US4] Pause auto-refresh when user is inactive (>5 min) in `frontend/src/app/stocks/page.tsx`
-- [ ] T090 [US4] Resume auto-refresh on user interaction in `frontend/src/app/stocks/page.tsx`
+- [x] T086 [US4] Implement auto-refresh with setInterval (60 seconds) in `frontend/src/app/virtual-market/page.tsx` ✅
+- [x] T087 [US4] Implement auto-refresh for index dashboard in `frontend/src/app/virtual-market/indices/page.tsx` ✅
+- [x] T088 [US4] Add loading indicator during data fetch in stock list page ✅
+- [x] T089 [US4] Pause auto-refresh when user is inactive (>5 min) in both pages ✅
+- [x] T090 [US4] Resume auto-refresh on user interaction in both pages ✅
 
-**Checkpoint**: Real-time updates work - prices change automatically every minute
+**Checkpoint**: ✅ Real-time updates work - prices change automatically every minute
 
 ---
 
@@ -239,21 +241,21 @@
 
 #### Backend - 元数据增强
 
-- [ ] T091 [US5] Ensure stock detail API includes full metadata in `backend/api/stocks.py` (market_cap_tier, beta, volatility, outstanding_shares, listing_date)
-- [ ] T092 [US5] Add is_happy300 and weight_in_happy300 fields to stock detail response in `backend/api/stocks.py`
-- [ ] T093 [US5] Query index_constituents to find which indices stock belongs to in `backend/api/stocks.py`
+- [x] T091 [US5] Ensure stock detail API includes full metadata in `backend/api/stocks.py` (market_cap_tier, beta, volatility, outstanding_shares, listing_date) ✅
+- [x] T092 [US5] Add is_happy300 and weight_in_happy300 fields to stock detail response in `backend/api/stocks.py` ✅
+- [x] T093 [US5] Query index_constituents to find which indices stock belongs to in `backend/api/stocks.py` ✅
 
 #### Frontend - 元数据展示
 
-- [ ] T094 [US5] Create metadata section in stock detail page `frontend/src/app/stocks/[symbol]/page.tsx` (display all metadata fields)
-- [ ] T095 [US5] Display "HAPPY300成分股，权重X%" if applicable in stock detail page
-- [ ] T096 [US5] Display "非HAPPY300成分股" if not in HAPPY300 in stock detail page
-- [ ] T097 [US5] Add section showing all indices this stock belongs to (with weights) in stock detail page
+- [x] T094 [US5] Create metadata section in stock detail page `frontend/src/app/virtual-market/stocks/[symbol]/page.tsx` (display all metadata fields) ✅
+- [x] T095 [US5] Display "HAPPY300成分股，权重X%" if applicable in stock detail page ✅
+- [x] T096 [US5] Display "非HAPPY300成分股" if not in HAPPY300 in stock detail page ✅
+- [x] T097 [US5] Add section showing all indices this stock belongs to (with weights) in stock detail page ✅
 
 #### Frontend - 板块详情页
 
-- [ ] T098 [P] [US5] Create sector detail page (if needed) in `frontend/src/app/sectors/[code]/page.tsx`
-- [ ] T099 [US5] Display all stocks in selected sector with sector avg beta, total market cap
+- [x] T098 [P] [US5] Create sector detail page in `frontend/src/app/virtual-market/sectors/[code]/page.tsx` ✅
+- [x] T099 [US5] Display all stocks in selected sector with sector avg beta, total market cap, sortable table ✅
 
 **Checkpoint**: Users can explore detailed stock metadata and sector information
 
