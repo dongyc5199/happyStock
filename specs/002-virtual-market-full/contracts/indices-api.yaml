@@ -1,0 +1,141 @@
+openapi: 3.0.3
+info:
+  title: 虚拟市场 - 指数API
+  version: 1.0.0
+  description: 提供市场指数相关API接口
+
+servers:
+  - url: http://localhost:8000/api/v1
+
+tags:
+  - name: indices
+    description: 指数相关操作
+
+paths:
+  /indices:
+    get:
+      summary: 获取指数列表
+      tags:
+        - indices
+      parameters:
+        - name: type
+          in: query
+          description: 指数类型（CORE核心指数/SECTOR行业指数）
+          schema:
+            type: string
+            enum: [CORE, SECTOR, ALL]
+            default: ALL
+      responses:
+        '200':
+          description: 成功返回指数列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IndexSummary'
+
+  /indices/{code}:
+    get:
+      summary: 获取指数详情
+      tags:
+        - indices
+      parameters:
+        - name: code
+          in: path
+          required: true
+          description: 指数代码（如HAPPY300）
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功返回指数详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexDetail'
+
+  /indices/{code}/constituents:
+    get:
+      summary: 获取指数成分股
+      tags:
+        - indices
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功返回成分股列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Constituent'
+
+components:
+  schemas:
+    IndexSummary:
+      type: object
+      required:
+        - code
+        - name
+        - current_value
+        - change_pct
+      properties:
+        code:
+          type: string
+          example: "HAPPY300"
+        name:
+          type: string
+          example: "快乐综合指数"
+        index_type:
+          type: string
+          example: "CORE"
+        current_value:
+          type: number
+          example: 3125.50
+        previous_close:
+          type: number
+          example: 3100.00
+        change_value:
+          type: number
+          example: 25.50
+        change_pct:
+          type: number
+          example: 0.82
+
+    IndexDetail:
+      allOf:
+        - $ref: '#/components/schemas/IndexSummary'
+        - type: object
+          properties:
+            base_point:
+              type: number
+              example: 3000
+            base_date:
+              type: string
+              format: date
+              example: "2024-01-01"
+            constituent_count:
+              type: integer
+              example: 100
+
+    Constituent:
+      type: object
+      properties:
+        symbol:
+          type: string
+          example: "601318"
+        name:
+          type: string
+          example: "平安保险"
+        weight:
+          type: number
+          example: 0.0850
+        rank:
+          type: integer
+          example: 2
