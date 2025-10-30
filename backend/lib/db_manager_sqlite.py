@@ -17,14 +17,28 @@ class DatabaseManager:
         初始化数据库管理器
 
         Args:
-            db_path: SQLite数据库文件路径
+            db_path: SQLite数据库文件路径 (可以是相对路径或绝对路径)
         """
         if db_path is None:
-            # 默认使用backend目录下的virtual_market.db
-            backend_dir = Path(__file__).parent.parent
-            self.db_path = str(backend_dir / "virtual_market.db")
+            # 从环境变量读取,支持相对路径
+            from config import settings
+            db_url = settings.resolved_database_url
+            
+            # 从 sqlite:///path.db 提取路径
+            if db_url.startswith('sqlite:///'):
+                self.db_path = db_url[10:]  # 去掉 'sqlite:///'
+            else:
+                # 默认使用backend目录下的virtual_market.db
+                backend_dir = Path(__file__).parent.parent
+                self.db_path = str(backend_dir / "virtual_market.db")
         else:
-            self.db_path = db_path
+            # 如果传入的是相对路径,转换为绝对路径
+            path = Path(db_path)
+            if not path.is_absolute():
+                backend_dir = Path(__file__).parent.parent
+                self.db_path = str(backend_dir / db_path)
+            else:
+                self.db_path = db_path
 
     def initialize(self):
         """初始化（SQLite不需要连接池）"""

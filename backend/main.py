@@ -23,7 +23,8 @@ async def lifespan(app: FastAPI):
     """
     # 启动时执行
     print("Starting up...")
-    print(f"Tortoise-ORM Database: {settings.DATABASE_URL}")
+    print(f"Database URL (raw): {settings.DATABASE_URL}")
+    print(f"Database URL (resolved): {settings.resolved_database_url}")
 
     # 初始化虚拟市场数据库连接池 (PostgreSQL)
     db_manager = get_db_manager()
