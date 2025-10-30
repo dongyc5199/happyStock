@@ -154,11 +154,17 @@ export default function MACDChart({ data, className = '', height = 200 }: MACDCh
         },
       });
 
-      const macdHistogramData: HistogramData[] = macdData.map(item => ({
-        time: item.time as any,
-        value: item.macd,
-        color: item.macd >= 0 ? style.macd.positiveColor : style.macd.negativeColor,
-      }));
+      const macdHistogramData: HistogramData[] = macdData
+        .map(item => ({
+          time: item.time as any,
+          value: item.macd,
+          color: item.macd >= 0 ? style.macd.positiveColor : style.macd.negativeColor,
+        }))
+        .sort((a, b) => {
+          const timeA = typeof a.time === 'string' ? new Date(a.time).getTime() / 1000 : a.time;
+          const timeB = typeof b.time === 'string' ? new Date(b.time).getTime() / 1000 : b.time;
+          return timeA - timeB;
+        });
 
       macdSeries.setData(macdHistogramData);
       macdSeriesRef.current = macdSeries;
@@ -177,10 +183,16 @@ export default function MACDChart({ data, className = '', height = 200 }: MACDCh
         },
       });
 
-      const diffLineData: LineData[] = macdData.map(item => ({
-        time: item.time as any,
-        value: item.diff,
-      }));
+      const diffLineData: LineData[] = macdData
+        .map(item => ({
+          time: item.time as any,
+          value: item.diff,
+        }))
+        .sort((a, b) => {
+          const timeA = typeof a.time === 'string' ? new Date(a.time).getTime() / 1000 : a.time;
+          const timeB = typeof b.time === 'string' ? new Date(b.time).getTime() / 1000 : b.time;
+          return timeA - timeB;
+        });
 
       diffSeries.setData(diffLineData);
       diffSeriesRef.current = diffSeries;
@@ -199,10 +211,16 @@ export default function MACDChart({ data, className = '', height = 200 }: MACDCh
         },
       });
 
-      const deaLineData: LineData[] = macdData.map(item => ({
-        time: item.time as any,
-        value: item.dea,
-      }));
+      const deaLineData: LineData[] = macdData
+        .map(item => ({
+          time: item.time as any,
+          value: item.dea,
+        }))
+        .sort((a, b) => {
+          const timeA = typeof a.time === 'string' ? new Date(a.time).getTime() / 1000 : a.time;
+          const timeB = typeof b.time === 'string' ? new Date(b.time).getTime() / 1000 : b.time;
+          return timeA - timeB;
+        });
 
       deaSeries.setData(deaLineData);
       deaSeriesRef.current = deaSeries;

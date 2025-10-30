@@ -32,6 +32,45 @@ if %ERRORLEVEL% neq 0 (
     )
 )
 
+echo.
+echo [INFO] 检查 Redis 服务...
+
+REM 检查 Redis 进程
+tasklist /FI "IMAGENAME eq redis-server.exe" 2>nul | find /I "redis-server.exe" >nul
+if %ERRORLEVEL% equ 0 (
+    REM 进程存在,尝试连接
+    if exist "C:\Redis\redis-cli.exe" (
+        "C:\Redis\redis-cli.exe" ping >nul 2>nul
+        if %ERRORLEVEL% equ 0 (
+            echo [OK] Redis 服务运行中
+            goto redis_check_done
+        )
+    )
+    
+    where redis-cli >nul 2>nul
+    if %ERRORLEVEL% equ 0 (
+        redis-cli ping >nul 2>nul
+        if %ERRORLEVEL% equ 0 (
+            echo [OK] Redis 服务运行中
+            goto redis_check_done
+        )
+    )
+    
+    echo [INFO] Redis 进程存在,等待初始化...
+    timeout /t 2 /nobreak >nul
+    goto redis_check_done
+)
+
+REM Redis 未运行
+echo [WARNING] Redis 未启动
+echo.
+echo WebSocket 实时推送需要 Redis 支持
+echo 请启动 Redis 或按任意键继续 ^(不使用实时推送^)
+echo.
+pause
+
+:redis_check_done
+echo.
 echo [INFO] 检查数据库文件...
 if not exist "db.sqlite3" (
     echo [INFO] 数据库文件不存在，首次启动会自动创建

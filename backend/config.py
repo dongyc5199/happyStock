@@ -3,8 +3,12 @@
 包含数据库连接、Redis连接等配置信息
 """
 import os
+from pathlib import Path
 from typing import Optional
 from pydantic_settings import BaseSettings
+
+# 获取项目根目录 (backend 目录)
+BASE_DIR = Path(__file__).resolve().parent
 
 
 class Settings(BaseSettings):
@@ -17,8 +21,33 @@ class Settings(BaseSettings):
 
     # 数据库配置
     # 生产环境使用 PostgreSQL: postgres://postgres:postgres@localhost:5432/fin_tech_mvp
-    # 开发环境可使用 SQLite: sqlite://db.sqlite3
-    DATABASE_URL: str = "sqlite://db.sqlite3"
+    # 开发环境可使用 SQLite: sqlite:///virtual_market.db (相对路径)
+    DB_TYPE: str = "sqlite"  # 数据库类型: sqlite 或 postgresql
+    DATABASE_URL: str = "sqlite:///virtual_market.db"
+    
+    @property
+    def resolved_database_url(self) -> str:
+        """
+        解析数据库 URL,将相对路径转换为绝对路径
+        支持格式:
+        - sqlite:///relative_path.db -> sqlite:///{BASE_DIR}/relative_path.db
+        - sqlite:////absolute/path.db -> 保持不变 (4个斜杠表示绝对路径)
+        - postgres://... -> 保持不变
+        """
+        if self.DATABASE_URL.startswith('sqlite:///'):
+            # 提取路径部分 (去掉 sqlite:///)
+            db_path = self.DATABASE_URL[10:]  # len('sqlite:///') = 10
+            
+            # 如果是绝对路径 (Windows: C:/ 或 Linux: /)
+            if (len(db_path) > 1 and db_path[1] == ':') or db_path.startswith('/'):
+                return self.DATABASE_URL
+            
+            # 相对路径,转换为绝对路径
+            absolute_path = BASE_DIR / db_path
+            return f"sqlite:///{absolute_path}"
+        
+        # 其他数据库 (PostgreSQL, MySQL 等) 保持不变
+        return self.DATABASE_URL
 
     # Redis配置
     REDIS_HOST: str = "localhost"

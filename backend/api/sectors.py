@@ -17,17 +17,56 @@ async def get_sectors():
     """
     获取所有板块列表
 
-    返回10个板块的基本信息
+    返回10个板块的基本信息，包含实时平均涨跌幅
     """
     try:
-        # 查询所有板块
+        # 查询所有板块基础信息
         query = """
-            SELECT *
+            SELECT code, name, name_en, beta, description
             FROM sectors
             ORDER BY code
         """
 
         sectors = db_manager.execute_query(query)
+
+        # 为每个板块计算统计信息
+        for sector in sectors:
+            sector_code = sector['code']
+
+            # 计算该板块的股票数量
+            count_query = """
+                SELECT COUNT(*) as stock_count
+                FROM stocks
+                WHERE sector_code = ? AND is_active = 1
+            """
+            count_result = db_manager.execute_query(
+                count_query, (sector_code,), fetch_one=True
+            )
+            sector['stock_count'] = count_result['stock_count'] if count_result else 0
+
+            # 计算该板块的平均涨跌幅
+            avg_query = """
+                SELECT AVG(change_pct) as avg_change_pct
+                FROM stocks
+                WHERE sector_code = ? AND is_active = 1
+            """
+            avg_result = db_manager.execute_query(
+                avg_query, (sector_code,), fetch_one=True
+            )
+            avg_change = avg_result['avg_change_pct'] if avg_result and avg_result['avg_change_pct'] else 0.0
+            sector['avg_change_pct'] = round(float(avg_change), 2)
+
+            # 计算板块总市值
+            cap_query = """
+                SELECT SUM(sm.market_cap) as total_market_cap
+                FROM stocks s
+                JOIN stock_metadata sm ON s.symbol = sm.symbol
+                WHERE s.sector_code = ? AND s.is_active = 1
+            """
+            cap_result = db_manager.execute_query(
+                cap_query, (sector_code,), fetch_one=True
+            )
+            sector['total_market_cap'] = cap_result['total_market_cap'] if cap_result and cap_result['total_market_cap'] else 0
 
         return create_success_response(
             sectors,

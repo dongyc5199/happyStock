@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { createChart, ColorType, IChartApi, ISeriesApi } from 'lightweight-charts';
+import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries } from 'lightweight-charts';
 import { stocksApi } from '@/lib/api/virtual-market';
 import type { StockDetail, KlineData } from '@/types/virtual-market';
 
@@ -100,8 +100,7 @@ export default function StockDetailPage() {
     chartRef.current = chart;
 
     // Add candlestick series
-    const candlestickSeries = chart.addSeries({
-      type: 'Candlestick',
+    const candlestickSeriesInstance = chart.addSeries(CandlestickSeries, {
       upColor: '#ef5350',
       downColor: '#26a69a',
       borderVisible: false,
@@ -109,18 +108,20 @@ export default function StockDetailPage() {
       wickDownColor: '#26a69a',
     });
 
-    candlestickSeriesRef.current = candlestickSeries;
+    candlestickSeriesRef.current = candlestickSeriesInstance;
 
     // Transform data for Lightweight Charts
-    const chartData = klineData.map((item) => ({
-      time: item.timestamp / 1000, // Convert to seconds
-      open: item.open,
-      high: item.high,
-      low: item.low,
-      close: item.close,
-    }));
+    const chartData = klineData
+      .map((item) => ({
+        time: item.timestamp / 1000, // Convert to seconds
+        open: item.open,
+        high: item.high,
+        low: item.low,
+        close: item.close,
+      }))
+      .sort((a, b) => a.time - b.time); // 确保数据按时间升序排列
 
-    candlestickSeries.setData(chartData);
+    candlestickSeriesInstance.setData(chartData);
 
     // Handle resize
     const handleResize = () => {

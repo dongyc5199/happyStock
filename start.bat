@@ -39,6 +39,92 @@ if %ERRORLEVEL% neq 0 (
 )
 echo [OK] pipenv 已安装
 
+REM 检查并启动 Redis
+echo [INFO] 检查 Redis 服务...
+
+REM 首先检查 Redis 是否已运行
+tasklist /FI "IMAGENAME eq redis-server.exe" 2>nul | find /I "redis-server.exe" >nul
+if %ERRORLEVEL% equ 0 (
+    REM Redis 进程存在,验证连接
+    if exist "C:\Redis\redis-cli.exe" (
+        "C:\Redis\redis-cli.exe" ping >nul 2>nul
+        if %ERRORLEVEL% equ 0 (
+            echo [OK] Redis 服务已在运行并可连接
+            goto redis_ok
+        )
+    )
+    
+    REM 尝试使用系统 redis-cli
+    where redis-cli >nul 2>nul
+    if %ERRORLEVEL% equ 0 (
+        redis-cli ping >nul 2>nul
+        if %ERRORLEVEL% equ 0 (
+            echo [OK] Redis 服务已在运行并可连接
+            goto redis_ok
+        )
+    )
+    
+    REM 进程存在但无法连接
+    echo [WARNING] Redis 进程存在但无法连接,可能正在启动中...
+    timeout /t 3 /nobreak >nul
+    goto redis_ok
+)
+
+REM Redis 未运行,尝试启动
+echo [INFO] Redis 未运行,正在启动...
+
+REM 检查本地安装
+if exist "C:\Redis\redis-server.exe" (
+    echo [INFO] 使用本地 Redis: C:\Redis\
+    start "Redis Server" /MIN "C:\Redis\redis-server.exe" >nul 2>nul
+    timeout /t 2 /nobreak >nul
+    
+    REM 验证启动
+    "C:\Redis\redis-cli.exe" ping >nul 2>nul
+    if %ERRORLEVEL% equ 0 (
+        echo [OK] Redis 启动成功
+        goto redis_ok
+    ) else (
+        echo [WARNING] Redis 启动后无法连接,可能需要更多时间
+        timeout /t 2 /nobreak >nul
+        "C:\Redis\redis-cli.exe" ping >nul 2>nul
+        if %ERRORLEVEL% equ 0 (
+            echo [OK] Redis 现在可以连接了
+            goto redis_ok
+        )
+    )
+)
+
+REM 尝试使用 PATH 中的 redis-server
+where redis-server >nul 2>nul
+if %ERRORLEVEL% equ 0 (
+    echo [INFO] 使用系统 Redis
+    start "Redis Server" /MIN redis-server >nul 2>nul
+    timeout /t 2 /nobreak >nul
+    
+    where redis-cli >nul 2>nul
+    if %ERRORLEVEL% equ 0 (
+        redis-cli ping >nul 2>nul
+        if %ERRORLEVEL% equ 0 (
+            echo [OK] Redis 启动成功
+            goto redis_ok
+        )
+    )
+)
+
+REM 所有启动方法都失败
+echo [WARNING] Redis 启动失败或未安装
+echo.
+echo WebSocket 实时推送功能需要 Redis 支持
+echo 请选择以下方式之一:
+echo   1. 运行 start_redis_local.bat 启动本地 Redis
+echo   2. 运行 start_redis.bat 使用 Docker 启动
+echo   3. 按任意键继续 ^(不使用实时推送^)
+echo   4. 按 Ctrl+C 取消启动
+echo.
+pause
+
+:redis_ok
 echo.
 echo [2/4] 检查项目依赖...
 echo.
