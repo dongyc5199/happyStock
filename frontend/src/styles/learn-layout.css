@@ -1,0 +1,4 @@
+/* 学习中心页面特殊样式 - 隐藏全局 Header */
+body:has(.learn-page-wrapper) > header {
+  display: none !important;
+}

@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
-import { MainNav } from '@/components/layout/MainNav';
 import { sectorsApi } from '@/lib/api/virtual-market';
 import type { Sector } from '@/types/virtual-market';
 import { useWebSocketContext, type StockData } from '@/contexts/WebSocketContext';
@@ -123,7 +122,6 @@ export default function VirtualMarketPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <MainNav />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-6">

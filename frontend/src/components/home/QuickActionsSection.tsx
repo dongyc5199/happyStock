@@ -41,28 +41,29 @@ export function QuickActionsSection() {
     },
   ];
 
-  const educationResources = [
-    {
-      icon: BookOpen,
-      title: '新手入门',
-      description: '从零开始学习股票交易基础知识',
-      topics: ['什么是股票', '如何开户', '基本术语', '交易规则'],
-    },
-    {
-      icon: GraduationCap,
-      title: '进阶学习',
-      description: '掌握技术分析和基本面分析方法',
-      topics: ['K线图解读', '技术指标', '财务分析', '估值方法'],
-    },
-    {
-      icon: Lightbulb,
-      title: '投资策略',
-      description: '学习成功投资者的交易策略和风险管理',
-      topics: ['价值投资', '趋势跟踪', '止损止盈', '仓位管理'],
-    },
-  ];
-
-  return (
+const educationResources = [
+  {
+    icon: BookOpen,
+    title: '新手入门',
+    description: '从零开始学习股票交易基础知识',
+    topics: ['什么是股票', '如何开户', '基本术语', '交易规则'],
+    href: '/learn?tab=beginner',
+  },
+  {
+    icon: GraduationCap,
+    title: '进阶学习',
+    description: '掌握技术分析和基本面分析方法',
+    topics: ['K线图解读', '技术指标', '财务分析', '估值方法'],
+    href: '/learn?tab=advanced',
+  },
+  {
+    icon: Lightbulb,
+    title: '投资策略',
+    description: '学习成功投资者的交易策略和风险管理',
+    topics: ['价值投资', '趋势跟踪', '止损止盈', '仓位管理'],
+    href: '/learn?tab=advanced',
+  },
+];  return (
     <div className="space-y-16">
       {/* 快速操作 */}
       <div className="space-y-8">
@@ -131,15 +132,16 @@ export function QuickActionsSection() {
           {educationResources.map((resource) => {
             const Icon = resource.icon;
             return (
-              <div
+              <Link
                 key={resource.title}
-                className="bg-white rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow border border-gray-100"
+                href={resource.href}
+                className="group bg-white rounded-xl p-6 shadow-sm hover:shadow-lg transition-all border border-gray-100 hover:border-indigo-200 cursor-pointer"
               >
-                <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center mb-4">
+                <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center mb-4 group-hover:bg-indigo-200 transition-colors">
                   <Icon className="w-6 h-6 text-indigo-600" />
                 </div>
                 
-                <h3 className="text-xl font-bold text-gray-900 mb-2">{resource.title}</h3>
+                <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-indigo-600 transition-colors">{resource.title}</h3>
                 <p className="text-gray-600 mb-4">{resource.description}</p>
                 
                 <ul className="space-y-2">
@@ -150,7 +152,13 @@ export function QuickActionsSection() {
                     </li>
                   ))}
                 </ul>
-              </div>
+
+                {/* 悬停时显示箭头 */}
+                <div className="mt-4 flex items-center gap-2 text-sm font-medium text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                  了解更多
+                  <ArrowRight className="w-4 h-4" />
+                </div>
+              </Link>
             );
           })}
         </div>

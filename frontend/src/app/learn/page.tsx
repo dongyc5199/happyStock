@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { 
   BookOpen, 
   TrendingUp, 
@@ -20,7 +21,16 @@ import {
 type TabType = 'beginner' | 'advanced' | 'faq';
 
 export default function LearnPage() {
-  const [activeTab, setActiveTab] = useState<TabType>('beginner');
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab') as TabType | null;
+  const [activeTab, setActiveTab] = useState<TabType>(tabParam || 'beginner');
+
+  // 监听 URL 参数变化
+  useEffect(() => {
+    if (tabParam && (tabParam === 'beginner' || tabParam === 'advanced' || tabParam === 'faq')) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">

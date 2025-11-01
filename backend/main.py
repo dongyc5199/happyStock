@@ -169,7 +169,7 @@ async def health_check():
 
 
 # 导入路由
-from routers import accounts, assets, trades, holdings, klines
+from routers import accounts, assets, trades, holdings, klines, auth
 from api import stocks as virtual_market_stocks
 from api import indices as virtual_market_indices
 from api import sectors as virtual_market_sectors
@@ -177,6 +177,7 @@ from api import market as virtual_market_market
 from api import websocket as websocket_api
 
 # 注册 API 路由
+app.include_router(auth.router, prefix="/api", tags=["认证"])
 app.include_router(accounts.router, prefix="/api/v1", tags=["账户管理"])
 app.include_router(assets.router, prefix="/api/v1", tags=["资产管理"])
 app.include_router(trades.router, prefix="/api/v1", tags=["交易管理"])
@@ -191,6 +192,20 @@ app.include_router(virtual_market_market.router, prefix="/api/v1", tags=["虚拟
 
 # WebSocket API路由 (实时数据推送)
 app.include_router(websocket_api.router, prefix="/api/v1", tags=["实时数据推送"])
+
+
+@app.get("/debug/routes")
+async def list_all_routes():
+    """调试端点：列出所有注册的路由"""
+    routes = []
+    for route in app.routes:
+        route_info = {
+            "path": route.path,
+            "name": getattr(route, "name", "unknown"),
+            "methods": list(getattr(route, "methods", [])) if hasattr(route, "methods") else ["WEBSOCKET"] if "websocket" in route.path.lower() else []
+        }
+        routes.append(route_info)
+    return {"total": len(routes), "routes": routes}
 
 
 if __name__ == "__main__":

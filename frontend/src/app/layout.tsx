@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { WebSocketProvider } from "@/contexts/WebSocketContext";
+import { Header } from "@/components/layout/Header";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -21,6 +22,7 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <body className={`${inter.variable} antialiased`}>
+        <Header />
         <WebSocketProvider autoConnect={true} autoAdjustThrottle={true}>
           {children}
         </WebSocketProvider>

@@ -91,6 +91,22 @@ function getThrottleByPath(pathname: string): PushInterval {
   return PUSH_INTERVALS.LAZY;
 }
 
+// 根据路径判断是否需要连接 WebSocket
+function shouldConnectByPath(pathname: string): boolean {
+  // 只在这些页面连接 WebSocket
+  const needsWebSocket = [
+    '/virtual-market',
+    '/market',
+    '/stocks',
+    '/trade',
+    '/order',
+    '/chart',
+    '/detail',
+  ];
+  
+  return needsWebSocket.some(path => pathname.includes(path));
+}
+
 interface WebSocketProviderProps {
   children: React.ReactNode;
   /** 是否启用自动连接 */
@@ -106,9 +122,14 @@ export function WebSocketProvider({
 }: WebSocketProviderProps) {
   const pathname = usePathname();
   
+  // 根据当前路径判断是否需要连接
+  const shouldConnect = useMemo(() => {
+    return autoConnect && shouldConnectByPath(pathname);
+  }, [autoConnect, pathname]);
+  
   // 根据当前路径确定初始节流间隔
   const initialThrottle = useMemo(() => {
-    return autoAdjustThrottle ? getThrottleByPath(pathname) : PUSH_INTERVALS.NORMAL;
+    return autoAdjustThrottle ? getThrottleByPath(pathname) : PUSH_INTERVALS.REALTIME;
   }, [pathname, autoAdjustThrottle]);
 
   // 使用 WebSocket Hook 连接市场数据
@@ -121,7 +142,7 @@ export function WebSocketProvider({
     subscribe,
     unsubscribe,
   } = useWebSocket<MarketData>('/ws/market', {
-    autoConnect,
+    autoConnect: shouldConnect,  // 根据路径决定是否连接
     throttle: initialThrottle,
     autoSlowDownOnBlur: false,  // 禁用自动降频,避免页面切换时降到60秒
     debug: process.env.NODE_ENV === 'development',

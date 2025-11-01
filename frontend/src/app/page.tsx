@@ -1,9 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
-import Link from 'next/link';
-import { marketApi } from '@/lib/api/virtual-market';
-import type { MarketOverview as MarketOverviewType } from '@/types/virtual-market';
+import { useEffect, useMemo } from 'react';
 import type { PageSection as PageSectionType } from '@/types/layout';
 import { IntegratedHeroSection } from '@/components/home/IntegratedHeroSection';
 import { QuickActionsSection } from '@/components/home/QuickActionsSection';
@@ -16,8 +13,6 @@ import { enablePerformanceMonitoring } from '@/lib/performance-monitor';
 // 不再需要 lazy load,新组件更轻量
 
 export default function Home() {
-  const [marketOverview, setMarketOverview] = useState<MarketOverviewType | null>(null);
-  const [loading, setLoading] = useState(true);
 
   // Layout store
   const initializeLayout = useLayoutStore((state) => state.initialize);
@@ -63,90 +58,14 @@ export default function Home() {
     enablePerformanceMonitoring();
   }, []);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  async function loadData() {
-    try {
-      setLoading(true);
-      const marketResponse = await marketApi.getMarketOverview();
-
-      if (marketResponse.success && marketResponse.data) {
-        setMarketOverview(marketResponse.data);
-      }
-    } catch (error) {
-      console.error('Failed to load data:', error);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">加载中...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <HomePageLayout>
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 overflow-y-auto scroll-smooth" style={{ scrollSnapType: 'y proximity' }}>
-        {/* Header */}
-        <header className="sticky top-0 z-50 bg-gradient-to-r from-blue-50/95 via-indigo-50/95 to-purple-50/95 backdrop-blur-md border-b border-blue-100/50 shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center shadow-md">
-                    <span className="text-white font-bold text-sm">H</span>
-                  </div>
-                  <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                    happyStock
-                  </h1>
-                </div>
-                <span className="px-3 py-1 text-xs font-medium text-indigo-700 bg-indigo-100 rounded-full border border-indigo-200">
-                  虚拟市场
-                </span>
-              </div>
-              <nav className="flex gap-6">
-                <Link 
-                  href="/virtual-market" 
-                  className="text-gray-700 hover:text-indigo-600 font-medium transition-colors relative group"
-                >
-                  市场首页
-                  <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-indigo-600 transition-all group-hover:w-full"></span>
-                </Link>
-                <Link 
-                  href="/virtual-market/indices" 
-                  className="text-gray-700 hover:text-indigo-600 font-medium transition-colors relative group"
-                >
-                  指数看板
-                  <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-indigo-600 transition-all group-hover:w-full"></span>
-                </Link>
-                <Link 
-                  href="/virtual-market/sectors" 
-                  className="text-gray-700 hover:text-indigo-600 font-medium transition-colors relative group"
-                >
-                  板块分析
-                  <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-indigo-600 transition-all group-hover:w-full"></span>
-                </Link>
-              </nav>
-            </div>
-          </div>
-        </header>
-
         {/* 区块 1: 整合的英雄区 (欢迎 + 核心价值 + 市场数据) */}
         <PageSection id="hero" title="欢迎使用 happyStock" isCollapsible={false}>
           <ErrorBoundary>
             <IntegratedHeroSection 
-              userCount={15234} 
-              marketOverview={marketOverview}
-              loading={loading}
+              userCount={15234}
             />
           </ErrorBoundary>
         </PageSection>
