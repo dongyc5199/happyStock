@@ -1,0 +1,488 @@
+openapi: 3.1.0
+info:
+  title: happyStock Authentication API
+  description: 用户认证服务 API，支持登录、注册、会话管理
+  version: 1.0.0
+  contact:
+    name: happyStock Development Team
+
+servers:
+  - url: http://localhost:8000/api
+    description: 本地开发服务器
+  - url: https://api.happystock.com/api
+    description: 生产环境
+
+tags:
+  - name: auth
+    description: 认证相关接口
+
+paths:
+  /auth/login:
+    post:
+      tags:
+        - auth
+      summary: 用户登录
+      description: 使用用户名/邮箱和密码登录，返回 JWT token
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              username:
+                summary: 使用用户名登录
+                value:
+                  username: happytrader
+                  password: Password123
+              email:
+                summary: 使用邮箱登录
+                value:
+                  username: trader@example.com
+                  password: Password123
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              examples:
+                success:
+                  summary: 成功登录
+                  value:
+                    success: true
+                    data:
+                      user:
+                        id: 550e8400-e29b-41d4-a716-446655440000
+                        username: happytrader
+                        email: trader@example.com
+                        avatar_url: https://example.com/avatars/user.jpg
+                        created_at: "2025-10-15T08:30:00Z"
+                      token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                      expires_at: "2025-11-01T08:30:00Z"
+        '401':
+          description: 认证失败（用户名/密码错误）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalid_credentials:
+                  summary: 用户名或密码错误
+                  value:
+                    success: false
+                    error:
+                      code: INVALID_CREDENTIALS
+                      message: 用户名或密码错误
+        '422':
+          description: 请求参数验证失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                validation_error:
+                  summary: 参数格式错误
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_ERROR
+                      message: 请求参数格式错误
+                      details:
+                        field: password
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/register:
+    post:
+      tags:
+        - auth
+      summary: 用户注册
+      description: 注册新用户账号，返回 JWT token（自动登录）
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              valid_registration:
+                summary: 有效注册请求
+                value:
+                  username: newtrader
+                  email: new@example.com
+                  password: SecurePass123
+      responses:
+        '201':
+          description: 注册成功（自动登录）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              examples:
+                success:
+                  summary: 注册成功
+                  value:
+                    success: true
+                    data:
+                      user:
+                        id: 660e8400-e29b-41d4-a716-446655440001
+                        username: newtrader
+                        email: new@example.com
+                        avatar_url: null
+                        created_at: "2025-10-31T10:00:00Z"
+                      token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                      expires_at: "2025-11-30T10:00:00Z"
+        '409':
+          description: 冲突（用户名或邮箱已存在）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                username_taken:
+                  summary: 用户名已被占用
+                  value:
+                    success: false
+                    error:
+                      code: USERNAME_TAKEN
+                      message: 该用户名已被占用
+                      details:
+                        field: username
+                email_taken:
+                  summary: 邮箱已被注册
+                  value:
+                    success: false
+                    error:
+                      code: EMAIL_TAKEN
+                      message: 该邮箱已被注册
+                      details:
+                        field: email
+        '422':
+          description: 请求参数验证失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                weak_password:
+                  summary: 密码强度不足
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_ERROR
+                      message: 密码必须至少8个字符，包含字母和数字
+                      details:
+                        field: password
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/me:
+    get:
+      tags:
+        - auth
+      summary: 获取当前用户信息
+      description: 验证 token 并返回当前用户信息
+      operationId: getCurrentUser
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: 成功获取用户信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+              examples:
+                success:
+                  summary: Token 有效
+                  value:
+                    success: true
+                    data:
+                      user:
+                        id: 550e8400-e29b-41d4-a716-446655440000
+                        username: happytrader
+                        email: trader@example.com
+                        avatar_url: https://example.com/avatars/user.jpg
+                        created_at: "2025-10-15T08:30:00Z"
+        '401':
+          description: Token 无效或已过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalid_token:
+                  summary: Token 无效
+                  value:
+                    success: false
+                    error:
+                      code: INVALID_TOKEN
+                      message: Token 无效或已过期
+                missing_token:
+                  summary: 缺少 Token
+                  value:
+                    success: false
+                    error:
+                      code: MISSING_TOKEN
+                      message: 请求头中缺少 Authorization
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/logout:
+    post:
+      tags:
+        - auth
+      summary: 用户登出
+      description: 使当前 token 失效（如果后端实现了 token 黑名单）
+      operationId: logout
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: 登出成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogoutResponse'
+              examples:
+                success:
+                  summary: 成功登出
+                  value:
+                    success: true
+                    message: 登出成功
+        '401':
+          description: Token 无效或已过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalid_token:
+                  summary: Token 无效
+                  value:
+                    success: false
+                    error:
+                      code: INVALID_TOKEN
+                      message: Token 无效或已过期
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token，格式：`Bearer <token>`
+
+  schemas:
+    User:
+      type: object
+      required:
+        - id
+        - username
+        - email
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: 用户唯一标识符
+          example: 550e8400-e29b-41d4-a716-446655440000
+        username:
+          type: string
+          minLength: 3
+          maxLength: 20
+          pattern: '^[a-zA-Z0-9_]{3,20}$'
+          description: 用户名（3-20字符，字母数字下划线）
+          example: happytrader
+        email:
+          type: string
+          format: email
+          description: 邮箱地址
+          example: trader@example.com
+        avatar_url:
+          type: string
+          format: uri
+          nullable: true
+          description: 头像 URL
+          example: https://example.com/avatars/user.jpg
+        created_at:
+          type: string
+          format: date-time
+          description: 创建时间（ISO 8601）
+          example: "2025-10-15T08:30:00Z"
+
+    AuthSession:
+      type: object
+      required:
+        - user
+        - token
+        - expires_at
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        token:
+          type: string
+          description: JWT 认证令牌
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1NTBlODQwMCIsImV4cCI6MTczMDQ1MDQwMH0...
+        expires_at:
+          type: string
+          format: date-time
+          description: Token 过期时间（ISO 8601）
+          example: "2025-11-30T10:00:00Z"
+
+    LoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          description: 用户名或邮箱
+          example: happytrader
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          description: 密码（8-128字符）
+          example: Password123
+
+    RegisterRequest:
+      type: object
+      required:
+        - username
+        - email
+        - password
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 20
+          pattern: '^[a-zA-Z0-9_]{3,20}$'
+          description: 用户名（3-20字符，字母数字下划线）
+          example: newtrader
+        email:
+          type: string
+          format: email
+          description: 邮箱地址
+          example: new@example.com
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          pattern: '^(?=.*[A-Za-z])(?=.*\d).{8,128}$'
+          description: 密码（8-128字符，包含字母和数字）
+          example: SecurePass123
+
+    LoginResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+          description: 操作是否成功
+          example: true
+        data:
+          $ref: '#/components/schemas/AuthSession'
+        error:
+          $ref: '#/components/schemas/ErrorDetail'
+
+    MeResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+          description: 操作是否成功
+          example: true
+        data:
+          type: object
+          properties:
+            user:
+              $ref: '#/components/schemas/User'
+        error:
+          $ref: '#/components/schemas/ErrorDetail'
+
+    LogoutResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+          description: 操作是否成功
+          example: true
+        message:
+          type: string
+          description: 成功消息
+          example: 登出成功
+
+    ErrorResponse:
+      type: object
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          description: 操作是否成功
+          example: false
+        error:
+          $ref: '#/components/schemas/ErrorDetail'
+
+    ErrorDetail:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: 错误代码
+          enum:
+            - INVALID_CREDENTIALS
+            - USERNAME_TAKEN
+            - EMAIL_TAKEN
+            - VALIDATION_ERROR
+            - INVALID_TOKEN
+            - MISSING_TOKEN
+            - SERVER_ERROR
+          example: INVALID_CREDENTIALS
+        message:
+          type: string
+          description: 错误描述（用户可读）
+          example: 用户名或密码错误
+        details:
+          type: object
+          description: 额外错误信息（可选）
+          properties:
+            field:
+              type: string
+              description: 相关字段名
+              example: username
