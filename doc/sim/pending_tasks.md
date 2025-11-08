@@ -1,0 +1,13 @@
+## 未完成待办（2025-11 更新）
+- [x] 重新执行 `backend/sim/migrations/0001_initial.sql` 并校验 Timescale hypertable，同步 `0002`、`0003` 的外部编码及复合索引
+- [x] 在 `SimulationService.process_tick` 中保持 Timescale / Redis 的 `participant_id` 一致
+- [x] `/api/sim/start|step|player/order` 返回 202 + trace id，Worker 具备限流与重试策略
+- [x] 首次 tick 自动注册零售/量化/机构/做市四类默认 Agent，串联 `FeatureService` 与 `EmotionService`
+- [x] 扩展 `/api/sim/state`，补充 `features` 与 `emotion` 字段并与 Timescale / Redis 对齐
+- [x] 补齐 `/sim/*` 测试，验证 trace id 及账面更新逻辑
+- [x] 更新 `doc/sim/*.md`（README/plan/tasks/checklists），同步异步流程与 Checklist
+- [x] 补齐 Pipenv 依赖及 `backend/TEST_SUMMARY.md` 执行记录
+- [x] 输出 SimulationWorker 限流/重试/监控 Runbook
+- [ ] 【技术债】Participants 阶段仍有 200-300ms 尾延，需会话预注册 + 进一步批量 upsert
+- [ ] 【技术债】`update_tick` 偶发 600ms，评估异步化或队列缓冲
+- [ ] 【技术债】FeatureService 合流策略待补文档，明确哪些指标需强制走外部服务

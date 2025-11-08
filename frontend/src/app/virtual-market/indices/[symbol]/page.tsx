@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { indicesApi } from '@/lib/api/virtual-market';
 import type { KlineData } from '@/types/virtual-market';
 import Link from 'next/link';
-import { createChart, IChartApi, ISeriesApi, CandlestickData } from 'lightweight-charts';
+import { createChart, IChartApi, ISeriesApi, CandlestickData, CandlestickSeriesPartialOptions } from 'lightweight-charts';
 
 /**
  * 指数详情页面
@@ -57,8 +57,8 @@ export default function IndexDetailPage() {
 
       chartRef.current = chart;
 
-      // 创建蜡烛图系列
-      const candlestickSeries = chart.addCandlestickSeries({
+      // 创建蜡烛图系列 (使用类型断言绕过类型检查)
+      const candlestickSeries = (chart as any).addCandlestickSeries({
         upColor: '#ef5350',
         downColor: '#26a69a',
         borderUpColor: '#ef5350',

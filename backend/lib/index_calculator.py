@@ -67,7 +67,6 @@ class IndexCalculator:
         constituents = self.get_constituents()
         
         if not constituents:
-            logger.warning(f"No constituents found for index {self.index_code}")
             return self.base_point
         
         # 计算加权价格总和

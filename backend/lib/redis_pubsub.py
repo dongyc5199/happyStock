@@ -9,6 +9,11 @@ import logging
 from typing import Dict, List, Optional, Callable, Any
 import redis.asyncio as redis
 
+try:
+    from config import settings  # type: ignore
+except ImportError:
+    settings = None  # type: ignore
+
 logger = logging.getLogger(__name__)
 
 
@@ -202,7 +207,14 @@ async def get_redis_pubsub() -> RedisPubSub:
     global _pubsub
     
     if _pubsub is None:
-        _pubsub = RedisPubSub()
+        redis_url = "redis://localhost:6379/0"
+        if settings is not None:
+            redis_url = (
+                getattr(settings, "SIM_REDIS_URL", None)
+                or getattr(settings, "REDIS_URL", None)
+                or redis_url
+            )
+        _pubsub = RedisPubSub(redis_url)
         await _pubsub.connect()
     
     return _pubsub

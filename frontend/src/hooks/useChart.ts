@@ -31,7 +31,7 @@ import {
  * }, [chart, data]);
  * ```
  */
-export function useChart(containerRef: React.RefObject<HTMLDivElement>) {
+export function useChart(containerRef: React.RefObject<HTMLDivElement | null>) {
   const [chart, setChart] = useState<IChartApi | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
 

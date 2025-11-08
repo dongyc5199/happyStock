@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}邮箱更改通知 - 快乐股票{% endblock %}
+
+{% block content %}
+<h2>🔔 邮箱更改通知</h2>
+
+<p>您好，<strong>{{ username }}</strong>！</p>
+
+<p>您的账户邮箱地址已成功更改。</p>
+
+<div class="info-box">
+    <p><strong>⏰ 更改时间：</strong>{{ change_time }}</p>
+    <p><strong>📧 原邮箱：</strong>{{ old_email }}</p>
+    <p><strong>📧 新邮箱：</strong>{{ new_email }}</p>
+</div>
+
+<p>今后，所有账户相关的通知将发送到新邮箱地址。</p>
+
+<div class="warning-box">
+    <p><strong>⚠️ 安全提示：</strong></p>
+    <ul style="margin: 10px 0; padding-left: 20px;">
+        <li><strong>如果这不是您本人的操作，请立即采取行动：</strong></li>
+        <li>1. 立即登录账户修改密码</li>
+        <li>2. 联系我们的客服团队</li>
+        <li>3. 检查账户是否有其他异常活动</li>
+    </ul>
+</div>
+
+<div style="text-align: center; margin: 30px 0;">
+    <a href="{{ app_base_url | default('http://localhost:3000') }}/settings" class="button">查看账户设置</a>
+</div>
+
+<p>感谢您使用快乐股票！</p>
+<p><strong>快乐股票团队</strong></p>
+{% endblock %}

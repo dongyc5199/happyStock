@@ -9,8 +9,10 @@
  * N 为周期数
  */
 
+import { Time } from 'lightweight-charts';
+
 export interface EMAResult {
-  time: string | number;
+  time: Time;
   value: number;
 }
 
@@ -22,7 +24,7 @@ export interface EMAResult {
  * @returns EMA 数据数组
  */
 export function calculateEMA(
-  data: Array<{ time: string | number; close: number }>,
+  data: Array<{ time: Time; close: number }>,
   period: number
 ): EMAResult[] {
   if (data.length === 0 || period <= 0) {
@@ -70,7 +72,7 @@ export function calculateEMA(
  * @returns 每个周期对应的 EMA 数据数组
  */
 export function calculateMultipleEMA(
-  data: Array<{ time: string | number; close: number }>,
+  data: Array<{ time: Time; close: number }>,
   periods: number[]
 ): Record<number, EMAResult[]> {
   const result: Record<number, EMAResult[]> = {};

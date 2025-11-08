@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries } from 'lightweight-charts';
+import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries, UTCTimestamp } from 'lightweight-charts';
 import { stocksApi } from '@/lib/api/virtual-market';
 import type { StockDetail, KlineData } from '@/types/virtual-market';
 
@@ -113,7 +113,7 @@ export default function StockDetailPage() {
     // Transform data for Lightweight Charts
     const chartData = klineData
       .map((item) => ({
-        time: item.timestamp / 1000, // Convert to seconds
+        time: Math.floor(item.timestamp / 1000) as UTCTimestamp, // Convert to seconds and cast to UTCTimestamp
         open: item.open,
         high: item.high,
         low: item.low,

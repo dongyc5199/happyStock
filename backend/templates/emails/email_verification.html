@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}邮箱验证 - 快乐股票{% endblock %}
+
+{% block content %}
+<h2>欢迎加入快乐股票！🎉</h2>
+
+<p>您好，<strong>{{ username }}</strong>！</p>
+
+<p>感谢您注册快乐股票账户。为了确保您能够正常使用所有功能，请验证您的邮箱地址。</p>
+
+<div style="text-align: center;">
+    <a href="{{ verification_url }}" class="button">验证邮箱</a>
+</div>
+
+<div class="info-box">
+    <p><strong>⏱️ 验证链接有效期：</strong>{{ valid_hours }} 小时</p>
+    <p><strong>📧 验证后您将可以：</strong></p>
+    <ul style="margin: 10px 0; padding-left: 20px;">
+        <li>接收重要的账户通知</li>
+        <li>使用密码找回功能</li>
+        <li>享受完整的平台服务</li>
+    </ul>
+</div>
+
+<p>如果按钮无法点击，请复制以下链接到浏览器地址栏：</p>
+<p style="word-break: break-all; color: #667eea; font-size: 13px;">{{ verification_url }}</p>
+
+<div class="warning-box">
+    <p><strong>💡 提示：</strong></p>
+    <ul style="margin: 10px 0; padding-left: 20px;">
+        <li>如果您没有注册快乐股票账户，请忽略此邮件</li>
+        <li>验证链接仅可使用一次</li>
+        <li>如果链接过期，您可以在账户设置中重新发送验证邮件</li>
+    </ul>
+</div>
+
+<p>期待与您一起开启投资之旅！</p>
+<p><strong>快乐股票团队</strong></p>
+{% endblock %}

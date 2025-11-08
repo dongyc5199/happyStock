@@ -149,6 +149,7 @@ async def register(request: RegisterRequest):
     用户注册
     
     注册新用户账号,成功后自动登录并返回 JWT token
+    同时发送邮箱验证邮件
     """
     try:
         # 创建新用户
@@ -157,6 +158,39 @@ async def register(request: RegisterRequest):
             email=request.email,
             password=request.password
         )
+        
+        # 发送邮箱验证邮件
+        # 导入所需模块
+        from models.email_verification_token import EmailVerificationToken
+        from services.token_service import TokenService, get_current_time
+        from services.email_service import EmailService
+        from datetime import timedelta
+        
+        token_service = TokenService()
+        email_service = EmailService()
+        
+        # 生成验证令牌
+        verification_token = token_service.generate_token()
+        expires_at = get_current_time() + timedelta(hours=48)
+        
+        await EmailVerificationToken.create(
+            user=user,
+            token=verification_token,
+            email=user.email,
+            expires_at=expires_at
+        )
+        
+        # 异步发送验证邮件（不阻塞响应）
+        try:
+            await email_service.send_verification_email(
+                email=user.email,
+                username=user.username,
+                token=verification_token
+            )
+        except Exception as email_error:
+            # 邮件发送失败不影响注册流程
+            print(f"发送验证邮件失败: {email_error}")
+        
     except ValueError as e:
         error_code = str(e)
         

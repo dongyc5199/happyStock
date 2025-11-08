@@ -1,0 +1,33 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+python-jose = {extras = ["cryptography"], version = "*"}
+passlib = {extras = ["bcrypt"], version = "*"}
+fastapi = "*"
+uvicorn = "*"
+tortoise-orm = "*"
+aiosqlite = "*"
+aioredis = "*"
+apscheduler = "*"
+email-validator = "*"
+pydantic-settings = "*"
+numpy = "*"
+websockets = "*"
+aiosmtplib = "*"
+jinja2 = "*"
+redis = {extras = ["asyncio"], version = "*"}
+asyncpg = "*"
+isort = "*"
+black = "*"
+gunicorn = "*"
+locust = "*"
+
+[dev-packages]
+httpx = "*"
+pytest = "*"
+
+[requires]
+python_version = "3.13"

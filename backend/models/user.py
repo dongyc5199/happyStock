@@ -17,6 +17,8 @@ class User(Model):
     email = fields.CharField(max_length=100, unique=True, description="邮箱")
     password_hash = fields.CharField(max_length=255, description="密码哈希")
     avatar_url = fields.CharField(max_length=255, null=True, description="头像URL")
+    email_verified = fields.BooleanField(default=False, description="邮箱是否已验证")
+    email_verified_at = fields.DatetimeField(null=True, description="邮箱验证时间")
     created_at = fields.DatetimeField(auto_now_add=True, description="创建时间")
     updated_at = fields.DatetimeField(auto_now=True, description="更新时间")
 

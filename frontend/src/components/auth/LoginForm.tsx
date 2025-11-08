@@ -76,9 +76,17 @@ export function LoginForm({ onSwitchToRegister, onSuccess }: LoginFormProps) {
 
       {/* 密码 */}
       <div>
-        <label htmlFor="login-password" className="block text-sm font-medium text-gray-700 mb-1">
-          密码
-        </label>
+        <div className="flex justify-between items-center mb-1">
+          <label htmlFor="login-password" className="block text-sm font-medium text-gray-700">
+            密码
+          </label>
+          <a
+            href="/auth/forgot-password"
+            className="text-sm text-blue-600 hover:text-blue-700 hover:underline"
+          >
+            忘记密码？
+          </a>
+        </div>
         <input
           id="login-password"
           type="password"

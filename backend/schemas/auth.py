@@ -42,6 +42,7 @@ class UserResponse(BaseModel):
     id: int
     username: str
     email: str
+    email_verified: bool = False
     avatar_url: Optional[str] = None
     created_at: datetime
 

@@ -307,7 +307,7 @@ export function useChartData({
     setLoadedRange(prev => ({ ...prev, reachedStart: true }));
     return;
 
-    // 以下代码需要后端支持 startTime/endTime 参数才能工作
+    /* 以下代码需要后端支持 startTime/endTime 参数才能工作 - Dead code, 暂时注释
     setLoadingState({ loading: true, direction: 'historical', error: null });
 
     try {
@@ -322,21 +322,21 @@ export function useChartData({
       } else {
         // 获取当前最早的数据时间
         const firstBar = data[0];
-        const firstTime = typeof firstBar.time === 'number'
+        const firstTime = (typeof firstBar.time === 'number'
           ? firstBar.time
-          : Math.floor(Date.parse(firstBar.time as string) / 1000);
+          : Math.floor(Date.parse(firstBar.time as string) / 1000)) as number;
 
         endTime = firstTime;
         startTime = 0; // 加载更早的数据
       }
 
       // 尝试从缓存读取
-      const cacheKey = getCacheKey(symbol, interval);
+      const cacheKey = getCacheKey(symbol!, interval);
       const cachedData = await readFromCache(cacheKey);
 
       let historicalData: CandlestickData[];
 
-      if (cachedData && cachedData.length > 0) {
+      if (cachedData !== null && cachedData.length > 0) {
         // 从缓存中筛选出需要的历史数据
         historicalData = cachedData.filter(item => {
           const time = typeof item.time === 'number'
@@ -410,6 +410,7 @@ export function useChartData({
         error: error.message || '加载历史数据失败',
       });
     }
+    */
   }, [symbol, chart, enabled, loadingState.loading, loadedRange, data, interval, loadLimit, getCacheKey, readFromCache, writeToCache]);
 
   // 加载最新数据（向右滑动）

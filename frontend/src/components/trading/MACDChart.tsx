@@ -10,11 +10,13 @@ import {
   HistogramData,
   HistogramSeries,
   LineSeries,
+  UTCTimestamp,
+  Time,
 } from 'lightweight-charts';
 import { calculateMACD, getMACDStyle, MACD_PRESETS } from '@/lib/indicators/macd';
 
 interface MACDChartProps {
-  data: Array<{ time: string | number; close: number }>;
+  data: Array<{ time: Time; close: number }>;
   className?: string;
   height?: number;
 }
@@ -34,7 +36,7 @@ export default function MACDChart({ data, className = '', height = 200 }: MACDCh
   const deaSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const macdSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
 
-  const [params, setParams] = useState(MACD_PRESETS.classic);
+  const [params, setParams] = useState<{ fast: number; slow: number; signal: number }>(MACD_PRESETS.classic);
   const [showConfig, setShowConfig] = useState(false);
 
   // 初始化图表（仅在组件挂载时创建一次）
@@ -156,7 +158,9 @@ export default function MACDChart({ data, className = '', height = 200 }: MACDCh
 
       const macdHistogramData: HistogramData[] = macdData
         .map(item => ({
-          time: item.time as any,
+          time: (typeof item.time === 'string' 
+            ? Math.floor(new Date(item.time).getTime() / 1000) 
+            : typeof item.time === 'number' ? Math.floor(item.time) : item.time) as UTCTimestamp,
           value: item.macd,
           color: item.macd >= 0 ? style.macd.positiveColor : style.macd.negativeColor,
         }))
@@ -172,7 +176,7 @@ export default function MACDChart({ data, className = '', height = 200 }: MACDCh
       // 2. 添加 DIFF 线
       const diffSeries = chartRef.current.addSeries(LineSeries, {
         color: style.diff.color,
-        lineWidth: style.diff.lineWidth,
+        lineWidth: style.diff.lineWidth as any,
         crosshairMarkerVisible: true,
         crosshairMarkerRadius: 4,
         priceScaleId: 'right',
@@ -185,7 +189,9 @@ export default function MACDChart({ data, className = '', height = 200 }: MACDCh
 
       const diffLineData: LineData[] = macdData
         .map(item => ({
-          time: item.time as any,
+          time: (typeof item.time === 'string' 
+            ? Math.floor(new Date(item.time).getTime() / 1000) 
+            : typeof item.time === 'number' ? Math.floor(item.time) : item.time) as UTCTimestamp,
           value: item.diff,
         }))
         .sort((a, b) => {
@@ -200,7 +206,7 @@ export default function MACDChart({ data, className = '', height = 200 }: MACDCh
       // 3. 添加 DEA 线
       const deaSeries = chartRef.current.addSeries(LineSeries, {
         color: style.dea.color,
-        lineWidth: style.dea.lineWidth,
+        lineWidth: style.dea.lineWidth as any,
         crosshairMarkerVisible: true,
         crosshairMarkerRadius: 4,
         priceScaleId: 'right',
@@ -213,7 +219,9 @@ export default function MACDChart({ data, className = '', height = 200 }: MACDCh
 
       const deaLineData: LineData[] = macdData
         .map(item => ({
-          time: item.time as any,
+          time: (typeof item.time === 'string' 
+            ? Math.floor(new Date(item.time).getTime() / 1000) 
+            : typeof item.time === 'number' ? Math.floor(item.time) : item.time) as UTCTimestamp,
           value: item.dea,
         }))
         .sort((a, b) => {

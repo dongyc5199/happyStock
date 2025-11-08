@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useChart } from '@/hooks/useChart';
 import { useChartData } from '@/hooks/useChartData';
-import { ISeriesApi, CandlestickData, HistogramData, LineData } from 'lightweight-charts';
+import { ISeriesApi, CandlestickData, HistogramData, LineData, Time } from 'lightweight-charts';
 import { getKlineData } from '@/lib/api/trading';
 import { calculateEMA, getEMAStyle, EMA_PRESETS } from '@/lib/indicators/ema';
 import MACDChart from './MACDChart';
@@ -84,7 +84,7 @@ export default function CandlestickChart({ assetSymbol, className = '', onChartR
 
   // MACD 显示配置
   const [showMACD, setShowMACD] = useState(true); // 默认显示 MACD
-  const [macdData, setMacdData] = useState<Array<{ time: string | number; close: number }>>([]);
+  const [macdData, setMacdData] = useState<Array<{ time: Time; close: number }>>([]);
 
   // 倒计时配置
   const [showCountdown, setShowCountdown] = useState(true); // 默认显示倒计时
@@ -92,7 +92,7 @@ export default function CandlestickChart({ assetSymbol, className = '', onChartR
 
   // 成交量显示配置
   const [showVolume, setShowVolume] = useState(true); // 默认显示成交量
-  const [volumeData, setVolumeData] = useState<Array<{ time: string | number; volume: number; isUp: boolean }>>([]);
+  const [volumeData, setVolumeData] = useState<Array<{ time: Time; volume: number; isUp: boolean }>>([]);
 
   // MACD 显示配置（移除拖动功能）
   // 固定高度：成交量 100px，MACD 150px
@@ -258,10 +258,10 @@ export default function CandlestickChart({ assetSymbol, className = '', onChartR
             // 获取 EMA 样式
             const style = getEMAStyle(period);
 
-            // 创建 EMA 线系列
+            // 创建 EMA 线系列 (使用 type assertion 绕过类型错误)
             const emaSeries = addLineSeries({
               color: style.color,
-              lineWidth: style.lineWidth,
+              lineWidth: style.lineWidth as any,
               title: style.title,
             });
 
@@ -352,7 +352,7 @@ export default function CandlestickChart({ assetSymbol, className = '', onChartR
       const interval = intervalMap[timeframe];
 
       // 只获取最新1根K线
-      const response = await getKlineData(assetSymbol, interval, 1);
+      const response = await getKlineData(assetSymbol, interval as any, 1);
 
       if (response.klines.length > 0 && candlestickSeriesRef.current) {
         const latestKline = response.klines[0];

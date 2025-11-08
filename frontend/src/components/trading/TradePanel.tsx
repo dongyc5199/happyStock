@@ -23,7 +23,7 @@ export default function TradePanel({ className = '' }: TradePanelProps) {
   const [price, setPrice] = useState('');
   const [quantity, setQuantity] = useState('');
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<{ assetSymbol?: string; price?: string; quantity?: string }>({});
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // 自动填充股票代码和价格

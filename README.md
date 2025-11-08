@@ -121,6 +121,7 @@ happyStock/
 - [项目启动指南](STARTUP.md)
 - [快速启动卡片](QUICKSTART.md)
 - [项目规划](CLAUDE.md)
+- [Repository Guidelines](AGENTS.md)
 
 ---
 

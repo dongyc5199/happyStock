@@ -7,6 +7,9 @@ from models.account import SimAccount
 from models.asset import Asset
 from models.trade import SimTrade
 from models.holding import SimHolding
+from models.password_reset_token import PasswordResetToken
+from models.email_verification_token import EmailVerificationToken, TokenType
+from models.email_log import EmailLog, EmailType, EmailStatus
 
 # 虚拟市场数据模型 (dataclass models)
 from .stock import Stock, StockMetadata, get_market_cap_tier, MARKET_CAP_TIERS
@@ -49,6 +52,13 @@ __all__ = [
     "Asset",
     "SimTrade",
     "SimHolding",
+    # Email and authentication models
+    "PasswordResetToken",
+    "EmailVerificationToken",
+    "TokenType",
+    "EmailLog",
+    "EmailType",
+    "EmailStatus",
     # Virtual market stock models
     'Stock',
     'StockMetadata',

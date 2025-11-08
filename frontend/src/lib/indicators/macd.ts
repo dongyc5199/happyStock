@@ -15,17 +15,18 @@
  * - 柱状图变长：趋势增强，柱状图变短：趋势减弱
  */
 
+import { Time } from 'lightweight-charts';
 import { calculateEMA } from './ema';
 
 export interface MACDResult {
-  time: string | number;
+  time: Time;
   diff: number;      // DIFF 线（快线）
   dea: number;       // DEA 线（慢线/信号线）
   macd: number;      // MACD 柱状图
 }
 
 export interface MACDCrossSignal {
-  time: string | number;
+  time: Time;
   type: 'golden' | 'death';  // golden = 金叉, death = 死叉
   diffValue: number;
   deaValue: number;
@@ -41,7 +42,7 @@ export interface MACDCrossSignal {
  * @returns MACD 数据数组
  */
 export function calculateMACD(
-  data: Array<{ time: string | number; close: number }>,
+  data: Array<{ time: Time; close: number }>,
   fastPeriod: number = 12,
   slowPeriod: number = 26,
   signalPeriod: number = 9
@@ -61,7 +62,7 @@ export function calculateMACD(
 
   // 2. 计算 DIFF (快线 - 慢线)
   // 由于 slowEMA 起始更晚，以 slowEMA 为准
-  const diffData: Array<{ time: string | number; close: number }> = [];
+  const diffData: Array<{ time: Time; close: number }> = [];
 
   // 找到两个 EMA 的公共时间范围
   const slowEMAMap = new Map(slowEMA.map(item => [item.time, item.value]));

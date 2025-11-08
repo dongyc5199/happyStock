@@ -8,10 +8,12 @@ import {
   ColorType,
   HistogramData,
   HistogramSeries,
+  UTCTimestamp,
+  Time,
 } from 'lightweight-charts';
 
 interface VolumeChartProps {
-  data: Array<{ time: string | number; volume: number; isUp: boolean }>;
+  data: Array<{ time: Time; volume: number; isUp: boolean }>;
   className?: string;
   height?: number;
 }
@@ -110,7 +112,9 @@ export default function VolumeChart({ data, className = '', height = 100 }: Volu
 
       const volumeData: HistogramData[] = data
         .map(item => ({
-          time: item.time as any,
+          time: (typeof item.time === 'string' 
+            ? Math.floor(new Date(item.time).getTime() / 1000) 
+            : typeof item.time === 'number' ? Math.floor(item.time) : item.time) as UTCTimestamp,
           value: item.volume,
           color: item.isUp ? '#26a69a' : '#ef5350',
         }))
