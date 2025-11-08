@@ -1,85 +1,109 @@
-"""
-配置文件
-包含数据库连接、Redis连接等配置信息
-"""
-import os
+"""Application configuration and settings helpers."""
+
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote_plus
+
 from pydantic_settings import BaseSettings
 
-# 获取项目根目录 (backend 目录)
 BASE_DIR = Path(__file__).resolve().parent
 
 
 class Settings(BaseSettings):
-    """应用配置类"""
+    """Central application settings loaded via Pydantic."""
 
-    # 应用基础配置
+    # General application metadata
     APP_NAME: str = "happyStock Trading API"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = True
 
-    # 数据库配置
-    # 生产环境使用 PostgreSQL: postgres://postgres:postgres@localhost:5432/fin_tech_mvp
-    # 开发环境可使用 SQLite: sqlite:///virtual_market.db (相对路径)
-    DB_TYPE: str = "sqlite"  # 数据库类型: sqlite 或 postgresql
+    # Primary database settings
+    DB_TYPE: str = "sqlite"
     DATABASE_URL: str = "sqlite:///virtual_market.db"
-    
+
+    SIM_DB_HOST: str = "localhost"
+    SIM_DB_PORT: int = 5432
+    SIM_DB_USER: str = "postgres"
+    SIM_DB_PASSWORD: str = "ChangeMe123!"
+    SIM_DB_NAME: str = "happystock_sim"
+
     @property
     def resolved_database_url(self) -> str:
-        """
-        解析数据库 URL,将相对路径转换为绝对路径
-        支持格式:
-        - sqlite:///relative_path.db -> sqlite:///{BASE_DIR}/relative_path.db
-        - sqlite:////absolute/path.db -> 保持不变 (4个斜杠表示绝对路径)
-        - postgres://... -> 保持不变
-        """
-        if self.DATABASE_URL.startswith('sqlite:///'):
-            # 提取路径部分 (去掉 sqlite:///)
-            db_path = self.DATABASE_URL[10:]  # len('sqlite:///') = 10
-            
-            # 如果是绝对路径 (Windows: C:/ 或 Linux: /)
-            if (len(db_path) > 1 and db_path[1] == ':') or db_path.startswith('/'):
+        """Return an absolute SQLite URL when a relative path is provided."""
+        prefix = "sqlite:///"
+        if self.DATABASE_URL.startswith(prefix):
+            db_path = self.DATABASE_URL[len(prefix) :]
+            if (len(db_path) > 1 and db_path[1] == ":") or db_path.startswith("/"):
                 return self.DATABASE_URL
-            
-            # 相对路径,转换为绝对路径
-            absolute_path = BASE_DIR / db_path
-            return f"sqlite:///{absolute_path}"
-        
-        # 其他数据库 (PostgreSQL, MySQL 等) 保持不变
+            absolute = BASE_DIR / db_path
+            return f"{prefix}{absolute}"
         return self.DATABASE_URL
 
-    # Redis配置
+    @property
+    def sim_database_url(self) -> str:
+        """Timescale/Postgres DSN used by the simulation services."""
+        password = quote_plus(self.SIM_DB_PASSWORD or "")
+        return (
+            f"postgresql://{self.SIM_DB_USER}:{password}"
+            f"@{self.SIM_DB_HOST}:{self.SIM_DB_PORT}/{self.SIM_DB_NAME}"
+        )
+
+    # Redis
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
     REDIS_PASSWORD: Optional[str] = None
-    REDIS_URL: Optional[str] = None  # 完整的Redis连接URL (可选)
+    REDIS_URL: Optional[str] = None
+    SIM_REDIS_URL: Optional[str] = None
+    SIM_SIGNAL_SESSION: Optional[str] = None
+    SIM_SIGNAL_REDIS_URL: Optional[str] = None
+    SIM_SIGNAL_DRIFT_SCALE: float = 0.0005
 
-    # JWT配置 (未来用于认证)
+    # JWT / auth
     SECRET_KEY: str = "your-secret-key-change-this-in-production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
-    # CORS配置
-    CORS_ORIGINS: list = [
-        "http://localhost:3000",  # Next.js 开发服务器
-        "http://localhost:8000",  # FastAPI 开发服务器
+    # SMTP
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = "noreply@happystock.com"
+    SMTP_FROM_NAME: str = "happyStock"
+    SMTP_SENDER_EMAIL: str = "support@happystock.com"
+    SMTP_USE_TLS: bool = True
+
+    # URLs
+    APP_BASE_URL: str = "http://localhost:3000"
+    API_BASE_URL: str = "http://localhost:8000"
+
+    # Token expirations (seconds)
+    PASSWORD_RESET_TOKEN_EXPIRY: int = 86400
+    EMAIL_VERIFICATION_TOKEN_EXPIRY: int = 172800
+
+    # CORS
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:3000",
+        "http://localhost:8000",
     ]
 
-    # 虚拟市场配置
-    PRICE_GENERATION_ENABLED: bool = True  # 是否启用价格生成
+    # Simulation options
+    PRICE_GENERATION_ENABLED: bool = False
+    SIM_SLOW_TICK_THRESHOLD_MS: int = 1000
+    SIM_SLOW_TICK_LOG: str = "backend/logs/slow_ticks.log"
+    SIM_AGENTS_ENABLED: bool = True
 
     class Config:
-        env_file = ".env"
+        env_file = str(BASE_DIR / ".env")
         case_sensitive = True
 
 
-# 创建配置实例
 settings = Settings()
 
 
-# Tortoise-ORM 配置
 TORTOISE_ORM = {
     "connections": {
         "default": {
@@ -97,6 +121,9 @@ TORTOISE_ORM = {
                 "models.asset",
                 "models.trade",
                 "models.holding",
+                "models.password_reset_token",
+                "models.email_verification_token",
+                "models.email_log",
             ],
             "default_connection": "default",
         },

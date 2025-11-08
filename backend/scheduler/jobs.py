@@ -13,16 +13,28 @@ from apscheduler.triggers.interval import IntervalTrigger
 import sys
 from pathlib import Path
 import json
+import logging
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+from config import settings
 from lib.db_manager_sqlite import DatabaseManager
 from lib.price_generator_v2 import PriceGeneratorV2  # 使用V2生成器
 from lib.index_calculator import IndexCalculator
 from lib.market_state_manager import MarketStateManager
 from lib.redis_pubsub import get_redis_pubsub
+from lib.sim_signal_provider import SimulationSignalProvider
 
 # 全局调度器实例
 scheduler: AsyncIOScheduler = None
+
+# 压低 APScheduler 日志等级，避免冗余执行日志
+for _logger_name in (
+    "apscheduler",
+    "apscheduler.scheduler",
+    "apscheduler.executors.default",
+    "apscheduler.jobstores.default",
+):
+    logging.getLogger(_logger_name).setLevel(logging.ERROR)
 
 
 async def generate_prices_job():
@@ -31,40 +43,49 @@ async def generate_prices_job():
     
     每分钟执行一次，更新所有股票价格和指数值
     """
+    signal_provider: SimulationSignalProvider | None = None
     try:
         start_time = datetime.now()
-        print(f"\n[{start_time.strftime('%H:%M:%S')}] ===== Price Generation Job Started =====")
 
         db_manager = DatabaseManager()
-        price_generator = PriceGeneratorV2(db_manager, steps_per_day=4800)  # 使用V2生成器
+        if settings.SIM_SIGNAL_SESSION and settings.SIM_SIGNAL_REDIS_URL:
+            try:
+                signal_provider = SimulationSignalProvider(
+                    settings.SIM_SIGNAL_REDIS_URL,
+                    settings.SIM_SIGNAL_SESSION,
+                )
+            except Exception as exc:
+                logging.warning("仿真信号提供者初始化失败: %s", exc)
+        price_generator = PriceGeneratorV2(
+            db_manager,
+            steps_per_day=4800,
+            signal_provider=signal_provider,
+            signal_strength=settings.SIM_SIGNAL_DRIFT_SCALE,
+        )  # 使用V2生成器
 
         # 1. 生成所有股票的新价格
-        print("[1/3] Generating prices for all stocks...")
         updated_count = await generate_all_stocks(price_generator)
-        print(f"      [+] Updated {updated_count} stocks")
 
         # 2. 重新计算所有指数
-        print("[2/3] Recalculating all indices...")
         indices_updated = await calculate_all_indices(db_manager)
-        print(f"      [+] Updated {indices_updated} indices")
 
         # 3. 计算耗时
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
-        print(f"[3/3] Job completed in {duration:.2f}s")
         
         # 4. 发布到 Redis (实时推送)
         try:
             await publish_market_data(db_manager)
         except Exception as e:
             print(f"[!] Error publishing to Redis: {e}")
-        
-        print(f"[{end_time.strftime('%H:%M:%S')}] ===== Price Generation Job Finished =====\n")
 
     except Exception as e:
         print(f"[!] Error in generate_prices_job: {e}")
         import traceback
         traceback.print_exc()
+    finally:
+        if signal_provider is not None:
+            signal_provider.close()
 
 
 async def generate_all_stocks(price_generator: PriceGeneratorV2) -> int:
@@ -217,7 +238,6 @@ async def publish_market_data(db_manager: DatabaseManager):
             }
             await pubsub.publish("market:stocks", market_message)
             
-            print(f"[4/4] Published {len(stocks_data)} stocks to Redis")
             
         finally:
             conn.close()

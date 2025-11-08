@@ -17,6 +17,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from lib.db_manager_sqlite import DatabaseManager
 from lib.market_state_manager import MarketStateManager
+from lib.sim_signal_provider import SimulationSignalProvider
 
 
 class PriceGeneratorV2:
@@ -58,6 +59,8 @@ class PriceGeneratorV2:
         db_manager: Optional[DatabaseManager] = None,
         market_state_manager: Optional[MarketStateManager] = None,
         steps_per_day: int = 4800,  # 3秒/步: 240分×60秒÷3秒 = 4800步
+        signal_provider: Optional[SimulationSignalProvider] = None,
+        signal_strength: float = 0.0005,
     ):
         """
         初始化价格生成器
@@ -66,11 +69,15 @@ class PriceGeneratorV2:
             db_manager: 数据库管理器
             market_state_manager: 市场状态管理器
             steps_per_day: 每日步数 (决定dt)
+            signal_provider: 仿真信号的偏移提供者
+            signal_strength: 信号对市场漂移的影响系数
         """
         self.db_manager = db_manager or DatabaseManager()
         self.market_state_manager = market_state_manager or MarketStateManager(
             self.db_manager
         )
+        self.signal_provider = signal_provider
+        self.signal_strength = signal_strength
         
         # 时间步长 (以日为单位)
         self.steps_per_day = steps_per_day
@@ -84,13 +91,6 @@ class PriceGeneratorV2:
         # 缓存板块数据
         self._sector_cache: Dict[str, Dict] = {}
         self._load_sectors()
-        
-        print(f"[PriceGeneratorV2] 初始化完成:")
-        print(f"  - 每日步数: {steps_per_day}")
-        print(f"  - 时间步长 dt: {self.dt:.6f} 日")
-        print(f"  - 市场日化波动: {self.sigma_m_day:.4f}")
-        print(f"  - 板块日化波动: {self.sigma_s_day:.4f}")
-        print(f"  - 个股日化波动: {self.sigma_i_day:.4f}")
     
     def _load_sectors(self):
         """加载板块数据到缓存"""
@@ -106,8 +106,6 @@ class PriceGeneratorV2:
                     "name": row[1],
                     "beta": row[2] if row[2] else 1.0,
                 }
-            
-            print(f"[+] 加载 {len(self._sector_cache)} 个板块到缓存")
         finally:
             conn.close()
     
@@ -266,6 +264,19 @@ class PriceGeneratorV2:
         
         return high, low
     
+    def _get_signal_bias(self) -> float:
+        """
+        从仿真信号源获取对市场漂移的附加偏移量。
+        """
+        if self.signal_provider is None or self.signal_strength == 0.0:
+            return 0.0
+        try:
+            bias = self.signal_provider.get_market_bias()
+        except Exception:
+            return 0.0
+        adjusted = bias * self.signal_strength
+        return max(min(adjusted, 0.01), -0.01)
+    
     def generate_next_price(
         self, 
         stock_symbol: str, 
@@ -334,6 +345,7 @@ class PriceGeneratorV2:
             # 获取市场趋势
             market_state = self.market_state_manager.get_current_state()
             mu_m_daily = market_state["daily_trend"] if market_state else 0.0
+            mu_m_daily += self._get_signal_bias()
             
             # 生成对数收益
             log_return, debug_info = self.generate_log_return(
