@@ -1,0 +1,80 @@
+version: "3.9"
+
+services:
+  timescale:
+    image: timescale/timescaledb-ha:pg16.4
+    container_name: sim-timescale
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${SIM_DB_PASSWORD:-ChangeMe123!}
+      POSTGRES_DB: ${SIM_DB_NAME:-happystock_sim}
+    ports:
+      - "${SIM_DB_PORT:-5432}:5432"
+    volumes:
+      - sim-timescale-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ${SIM_DB_NAME:-happystock_sim}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: sim-redis
+    restart: unless-stopped
+    command:
+      - redis-server
+      - "--appendonly"
+      - "yes"
+      - "--appendfsync"
+      - "everysec"
+      - "--requirepass"
+      - "${SIM_REDIS_PASSWORD:-SimRedisPass!}"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
+      - "--tcp-keepalive"
+      - "60"
+      - "--hash-max-ziplist-entries"
+      - "512"
+    ports:
+      - "${SIM_REDIS_PORT:-6379}:6379"
+    volumes:
+      - sim-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${SIM_REDIS_PASSWORD:-SimRedisPass!}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  sim-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sim-backend
+    restart: unless-stopped
+    depends_on:
+      timescale:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:${SIM_DB_PASSWORD:-ChangeMe123!}@timescale:5432/${SIM_DB_NAME:-happystock_sim}
+      REDIS_URL: redis://default:${SIM_REDIS_PASSWORD:-SimRedisPass!}@redis:6379/0
+      SIM_REDIS_URL: redis://default:${SIM_REDIS_PASSWORD:-SimRedisPass!}@redis:6379/1
+      DEBUG: "True"
+    command:
+      [
+        "bash",
+        "-lc",
+        "pipenv install --deploy && pipenv run uvicorn main:app --host 0.0.0.0 --port 8000"
+      ]
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    working_dir: /app
+
+volumes:
+  sim-timescale-data:
+  sim-redis-data:

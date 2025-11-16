@@ -52,3 +52,104 @@ class TickResponse(BaseModel):
     orders: list[str] = Field(default_factory=list, description='Accepted order identifiers')
     trades: list[dict[str, Any]] = Field(default_factory=list, description='Executed trades summary')
     snapshot: dict[str, Any] = Field(default_factory=dict, description='Resulting market snapshot data')
+
+
+# User Order Schemas (Feature: 001-ai-user-order-matching)
+
+
+class OrderRequest(BaseModel):
+    """User order submission request"""
+    side: Literal['BUY', 'SELL'] = Field(..., description='Order side: BUY or SELL')
+    order_type: Literal['MARKET', 'LIMIT'] = Field(..., description='Order type: MARKET or LIMIT')
+    quantity: float = Field(..., gt=0, description='Order quantity, must be > 0')
+    price: Optional[float] = Field(None, gt=0, description='Limit price (required for LIMIT orders)')
+
+    class Config:
+        json_schema_extra = {
+            "examples": [
+                {
+                    "side": "BUY",
+                    "order_type": "LIMIT",
+                    "quantity": 100.0,
+                    "price": 50.25
+                },
+                {
+                    "side": "SELL",
+                    "order_type": "MARKET",
+                    "quantity": 50.0
+                }
+            ]
+        }
+
+
+class OrderAcceptedResponse(BaseModel):
+    """Response for successfully accepted user order"""
+    status: Literal['accepted'] = Field(default='accepted', description='Order acceptance status')
+    order_id: str = Field(..., description='Unique order identifier')
+    message: str = Field(default="Order queued for next tick", description='Status message')
+    estimated_execution_tick: int = Field(..., ge=0, description='Estimated tick when order will be processed')
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "status": "accepted",
+                "order_id": "user-12345-1699876543000-abc123",
+                "message": "Order queued for next tick",
+                "estimated_execution_tick": 1234
+            }
+        }
+
+
+class TradeInfo(BaseModel):
+    """Individual trade execution details"""
+    trade_id: str = Field(..., description='Trade identifier')
+    price: float = Field(..., description='Execution price')
+    quantity: float = Field(..., description='Executed quantity')
+    counterparty_type: Literal['user', 'ai_retail', 'ai_prop', 'ai_institutional', 'ai_market_maker'] = Field(
+        ..., description='Type of counterparty in the trade'
+    )
+    executed_at: datetime = Field(..., description='Execution timestamp')
+
+
+class OrderDetail(BaseModel):
+    """Detailed order information including fills"""
+    order_id: str = Field(..., description='Order identifier')
+    session_id: int = Field(..., description='Session ID')
+    user_id: int = Field(..., description='User ID')
+    side: Literal['BUY', 'SELL'] = Field(..., description='Order side')
+    order_type: Literal['MARKET', 'LIMIT'] = Field(..., description='Order type')
+    quantity: float = Field(..., description='Order quantity')
+    price: Optional[float] = Field(None, description='Limit price (for LIMIT orders)')
+    status: Literal['PENDING', 'NEW', 'PARTIAL', 'FILLED', 'CANCELLED'] = Field(..., description='Order status')
+    filled_quantity: float = Field(..., description='Cumulative filled quantity')
+    avg_filled_price: Optional[float] = Field(None, description='Average fill price')
+    timestamp: int = Field(..., description='Order timestamp (nanoseconds)')
+    created_at: datetime = Field(..., description='Creation time')
+    updated_at: datetime = Field(..., description='Last update time')
+    trades: list[TradeInfo] = Field(default_factory=list, description='Associated trades')
+
+
+class OrderListResponse(BaseModel):
+    """Paginated list of orders"""
+    orders: list[OrderDetail] = Field(default_factory=list, description='Order list')
+    total: int = Field(..., ge=0, description='Total number of orders matching filter')
+    limit: int = Field(..., description='Page size limit')
+    offset: int = Field(..., description='Page offset')
+
+
+class CancelOrderResponse(BaseModel):
+    """Response for order cancellation"""
+    status: Literal['cancelled'] = Field(default='cancelled', description='Cancellation status')
+    order_id: str = Field(..., description='Cancelled order ID')
+    cancelled_quantity: float = Field(..., ge=0, description='Quantity cancelled (unfilled portion)')
+    message: str = Field(..., description='Cancellation message')
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "status": "cancelled",
+                "order_id": "user-12345-1699876543000-abc123",
+                "cancelled_quantity": 40.0,
+                "message": "Order cancelled, remaining 40.0 units will not be executed"
+            }
+        }

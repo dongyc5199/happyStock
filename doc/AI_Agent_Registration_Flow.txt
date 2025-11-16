@@ -1,0 +1,324 @@
+AI Agent Auto-Registration Flow Diagram
+==========================================
+
+Backend Startup Sequence
+------------------------
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    Backend Server Starts                        │
+│                     (main.py: lifespan)                         │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Check: SIM_AGENTS_ENABLED == true?                             │
+├─────────────────────────────────────────────────────────────────┤
+│  YES: Create AgentRegistry()                                    │
+│       app.state.sim_agent_registry = registry                   │
+│       Print: "[+] Simulation agent registry ready"              │
+│                                                                   │
+│  NO:  app.state.sim_agent_registry = None                       │
+│       Print: "[*] Simulation agents disabled"                   │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Create SimulationAutoRunner                                    │
+├─────────────────────────────────────────────────────────────────┤
+│  auto_runner = SimulationAutoRunner(                            │
+│      service=sim_service,                                       │
+│      session_codes=["autoplay-demo"],                           │
+│      agent_registry=sim_agent_registry,  ◄── Pass registry      │
+│      ...                                                         │
+│  )                                                               │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  await auto_runner.start()                                      │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  SimulationAutoRunner.start()                                   │
+├─────────────────────────────────────────────────────────────────┤
+│  for each session_code in ["autoplay-demo"]:                    │
+│      await _ensure_session(session_code)                        │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  _ensure_session("autoplay-demo")                               │
+├─────────────────────────────────────────────────────────────────┤
+│  session = fetch_session_by_code("autoplay-demo")               │
+│                                                                   │
+│  if session is None:                                             │
+│      session = create_session(...)                              │
+│      session_created = True  ◄── Flag set                       │
+│  else:                                                           │
+│      session_created = False ◄── Existing session               │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+                                ▼
+                    ┌───────────┴────────────┐
+                    │                        │
+              YES   │   session_created?     │   NO
+            ┌───────┤   agent_registry?      ├─────────┐
+            │       └────────────────────────┘         │
+            │                                           │
+            ▼                                           ▼
+┌──────────────────────────┐              ┌────────────────────────┐
+│ _register_default_agents │              │  Skip registration     │
+│  (session_id, code)      │              │  (already registered   │
+└──────────┬───────────────┘              │   or agents disabled)  │
+           │                               └────────────────────────┘
+           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Register 10 AI Agents                                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ Prop Traders (3 agents)                                 │   │
+│  ├─────────────────────────────────────────────────────────┤   │
+│  │ • prop-aggressive   (5% profit, 2% stop)                │   │
+│  │ • prop-balanced     (3% profit, 1.5% stop)              │   │
+│  │ • prop-conservative (2% profit, 1% stop)                │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                   │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ Institutional Investors (2 agents)                      │   │
+│  ├─────────────────────────────────────────────────────────┤   │
+│  │ • inst-large  (100-tick mean reversion, TWAP enabled)   │   │
+│  │ • inst-medium (50-tick mean reversion, TWAP enabled)    │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                   │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ Retail Traders (5 agents)                               │   │
+│  ├─────────────────────────────────────────────────────────┤   │
+│  │ • retail-follower-1  (0.9 herd strength)                │   │
+│  │ • retail-follower-2  (0.9 herd strength)                │   │
+│  │ • retail-moderate-1  (0.5 herd strength)                │   │
+│  │ • retail-moderate-2  (0.5 herd strength)                │   │
+│  │ • retail-independent (0.2 herd strength)                │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                   │
+│  Each agent registered via:                                     │
+│  await registry.register(                                       │
+│      session_id=session.id,                                     │
+│      agent=AgentClass(...),                                     │
+│      weight=...,                                                 │
+│      pool_code=...,                                              │
+│  )                                                               │
+│                                                                   │
+│  Logger: "Successfully registered 10 AI agents..."              │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  AgentRegistry Internal State                                   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  _agents = {                                                     │
+│      session_id: [                                               │
+│          RegisteredAgent(agent=PropMomentumAgent(...),          │
+│                          weight=1.2,                             │
+│                          pool_code="prop"),                      │
+│          RegisteredAgent(agent=PropMomentumAgent(...),          │
+│                          weight=1.0,                             │
+│                          pool_code="prop"),                      │
+│          ...  (total 10 agents)                                  │
+│      ]                                                           │
+│  }                                                               │
+│                                                                   │
+│  IN-MEMORY storage (fast access, no DB queries)                 │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Simulation Tick Loop                                           │
+├─────────────────────────────────────────────────────────────────┤
+│  while True:                                                     │
+│      for session in ["autoplay-demo"]:                          │
+│          # Process tick                                          │
+│          result = await service.process_tick(                   │
+│              session_id=session.id,                             │
+│              tick=next_tick,                                     │
+│              orders=[],  # User orders                           │
+│          )                                                       │
+│                                                                   │
+│          # Inside process_tick:                                  │
+│          if agent_registry:                                      │
+│              agent_orders = await registry.generate_orders(     │
+│                  session_id, session_code, tick, context        │
+│              )                                                   │
+│              # Combine with user orders                          │
+│              all_orders = user_orders + agent_orders            │
+│              # Match orders and execute trades                  │
+│                                                                   │
+│      await asyncio.sleep(interval)  # 500ms default             │
+└─────────────────────────────────────────────────────────────────┘
+
+
+Agent Order Generation Flow (per tick)
+---------------------------------------
+
+┌─────────────────────────────────────────────────────────────────┐
+│  Tick N: SimulationService.process_tick()                       │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  if agent_registry:                                             │
+│      agent_orders = await registry.generate_orders(...)         │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  AgentRegistry.generate_orders()                                │
+├─────────────────────────────────────────────────────────────────┤
+│  for registered_agent in _agents[session_id]:                   │
+│      orders = await agent.generate_orders(                      │
+│          session_id, session_code, tick, context                │
+│      )                                                           │
+│      # Weight adjustment                                         │
+│      all_orders.extend(orders)                                   │
+│                                                                   │
+│  return all_orders                                               │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+                                ▼
+         ┌──────────────────────┴──────────────────────┐
+         │                                              │
+         ▼                                              ▼
+┌────────────────────┐                    ┌─────────────────────┐
+│ PropMomentumAgent  │                    │ InstitutionalAgent  │
+│ .generate_orders() │                    │ .generate_orders()  │
+├────────────────────┤                    ├─────────────────────┤
+│ Check position     │                    │ Update price        │
+│ P&L calculation    │                    │ history (100 ticks) │
+│                    │                    │                     │
+│ If profit > 3%:    │                    │ Calculate mean      │
+│   → SELL (profit)  │                    │ Calculate deviation │
+│                    │                    │                     │
+│ If loss > 1.5%:    │                    │ If deviation > 2%:  │
+│   → SELL (stoploss)│                    │   → Mean reversion  │
+│                    │                    │                     │
+│ Else:              │                    │ If large order:     │
+│   Analyze momentum │                    │   → TWAP splitting  │
+│   → BUY/SELL       │                    │                     │
+└────────┬───────────┘                    └──────────┬──────────┘
+         │                                           │
+         └──────────────┬────────────────────────────┘
+                        │
+                        ▼
+            ┌───────────────────────┐
+            │ RetailSentimentAgent  │
+            │ .generate_orders()    │
+            ├───────────────────────┤
+            │ Fetch market sentiment│
+            │                       │
+            │ If herd_strength=0.9: │
+            │   Follow sentiment    │
+            │                       │
+            │ If herd_strength=0.2: │
+            │   Independent decision│
+            │                       │
+            │ → BUY/SELL            │
+            └───────────┬───────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  All agent orders collected                                     │
+├─────────────────────────────────────────────────────────────────┤
+│  [                                                               │
+│    Order(id="prop-aggressive-123", side="BUY", qty=120),        │
+│    Order(id="inst-large-twap-1-456", side="SELL", qty=50),     │
+│    Order(id="retail-follower-1-789", side="BUY", qty=30),      │
+│    ...                                                           │
+│  ]                                                               │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Combine with user orders                                       │
+│  Execute order matching                                         │
+│  Generate trades                                                 │
+│  Update market state                                             │
+│  Cache and broadcast results                                    │
+└─────────────────────────────────────────────────────────────────┘
+
+
+API Access to Agent Data
+-------------------------
+
+┌─────────────────────────────────────────────────────────────────┐
+│  User/Frontend                                                   │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  GET /api/sim/sessions/{session_id}/agents                      │
+├─────────────────────────────────────────────────────────────────┤
+│  → Lists all 10 registered agents                               │
+│  → Returns behavior parameters (profit_target, stop_loss, etc.) │
+│  → Returns current score and status                             │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  GET /api/sim/sessions/{session_id}/agents/{agent_code}         │
+├─────────────────────────────────────────────────────────────────┤
+│  → Returns detailed info for specific agent                     │
+│  → Example: /agents/prop-aggressive                             │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  GET /api/sim/sessions/{session_id}/agents/{agent_code}/perf    │
+├─────────────────────────────────────────────────────────────────┤
+│  → Returns performance metrics                                  │
+│  → total_orders, total_trades, win_rate, P&L%, Sharpe ratio    │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  PUT /api/sim/sessions/{session_id}/agents/{agent_code}/config  │
+├─────────────────────────────────────────────────────────────────┤
+│  → Update agent behavior parameters                             │
+│  → Body: {profit_target: 0.04, stop_loss: 0.015}               │
+│  → Parameters applied on next tick                              │
+└─────────────────────────────────────────────────────────────────┘
+
+
+Key Benefits
+------------
+
+✅ Zero Configuration: Just set SIM_AGENTS_ENABLED=true
+✅ Automatic: Agents registered on session creation
+✅ Consistent: Same agent setup for all autoplay sessions
+✅ Testable: Comprehensive test suite validates behavior
+✅ Manageable: Full API for monitoring and control
+✅ Performant: In-memory storage, no DB queries per tick
+✅ Documented: Complete guides and examples
+
+
+Notes
+-----
+
+[1] Agent instances stored IN-MEMORY in AgentRegistry
+    - Fast access (no DB queries during tick processing)
+    - Persist for server lifetime
+    - Automatically re-registered on server restart
+
+[2] Agent behavior parameters and activity ARE persisted in PostgreSQL
+    - simulation.participants table
+    - simulation.orders table
+    - simulation.trades table
+
+[3] Registration only happens for NEWLY CREATED sessions
+    - Prevents overwriting existing agent configurations
+    - Idempotent: safe to restart server multiple times
+
+[4] Agent configuration is customizable in auto_runner.py
+    - Edit _register_default_agents() method
+    - Restart server to apply changes

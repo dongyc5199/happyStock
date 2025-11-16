@@ -26,8 +26,9 @@ gunicorn = "*"
 locust = "*"
 
 [dev-packages]
-httpx = "*"
 pytest = "*"
+pytest-asyncio = "*"
+httpx = "*"
 
 [requires]
 python_version = "3.13"

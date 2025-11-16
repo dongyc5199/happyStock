@@ -190,3 +190,52 @@ class SimulationCache:
         await self._client.lpush(self._coach_queue_key(), message)
         await self._client.ltrim(self._coach_queue_key(), 0, maxlen - 1)
 
+    # ------------------------------------------------------------------
+    # User order queue (T025-T026)
+    def _user_orders_key(self, session: str) -> str:
+        return f"sim:{session}:pending_orders"
+
+    async def push_pending_user_order(self, session: str, order_data: dict[str, Any]) -> None:
+        """Queue a user order for processing in the next tick (T025)."""
+        message = json.dumps(order_data, ensure_ascii=False)
+        await self._client.rpush(self._user_orders_key(session), message)
+
+    async def pop_pending_user_orders(self, session: str, max_count: int = 100) -> list[dict[str, Any]]:
+        """Retrieve and remove all pending user orders for a session (T026)."""
+        key = self._user_orders_key(session)
+        orders = []
+        for _ in range(max_count):
+            message = await self._client.lpop(key)
+            if message is None:
+                break
+            try:
+                order_data = json.loads(message)
+                orders.append(order_data)
+            except json.JSONDecodeError:
+                continue
+        return orders
+
+    # ------------------------------------------------------------------
+    # Orderbook snapshot cache (T027)
+    def _orderbook_snapshot_key(self, session: str) -> str:
+        return f"sim:{session}:orderbook"
+
+    async def cache_orderbook_snapshot(
+        self, session: str, snapshot: dict[str, Any], ttl_seconds: int = 5
+    ) -> None:
+        """Cache orderbook depth snapshot with TTL (T027)."""
+        key = self._orderbook_snapshot_key(session)
+        data = json.dumps(snapshot, ensure_ascii=False)
+        await self._client.setex(key, ttl_seconds, data)
+
+    async def get_cached_orderbook(self, session: str) -> dict[str, Any] | None:
+        """Retrieve cached orderbook snapshot (T027)."""
+        key = self._orderbook_snapshot_key(session)
+        data = await self._client.get(key)
+        if data is None:
+            return None
+        try:
+            return json.loads(data)
+        except json.JSONDecodeError:
+            return None
+

@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from .emotion_service import EmotionService
     from .agents import AgentRegistry, AgentContext
 
+from config import settings
 from .cache import LeaderboardEntry, SimulationCache
 from .coach import CoachInsightBuilder
 from .engine import MatchingEngine, Order, OrderSide, OrderStatus, OrderType
@@ -35,6 +36,7 @@ from .repositories import (
     MarketStateRepository,
     OrderTradeRepository,
     SimulationRepository,
+    UserOrderRepository,
 )
 from .types import (
     CoachInsight,
@@ -113,8 +115,14 @@ class SimulationService:
         self._engines: dict[int, MatchingEngine] = {}
         self._last_price: dict[int, float] = defaultdict(float)
         self._session_codes: dict[int, str] = {}
-        self._order_participants: dict[int, dict[str, Tuple[str, Optional[int]]]] = defaultdict(dict)
+        self._order_participants: dict[int, dict[str, dict[str, Any]]] = defaultdict(
+            dict
+        )
         self._participant_db_cache: dict[int, dict[str, int]] = defaultdict(dict)
+        self._session_profiles: dict[int, dict[str, Any]] = {}
+        self._latest_pool_stats: dict[int, Dict[str, PoolTickStat]] = {}
+        self._retail_flow_history: dict[int, list[float]] = defaultdict(list)
+        self._latest_pool_stats: dict[int, Dict[str, PoolTickStat]] = {}
         self._participant_semaphore = asyncio.Semaphore(
             max(1, int(os.getenv("SIM_PARTICIPANT_CONCURRENCY", "10")))
         )
@@ -151,6 +159,42 @@ class SimulationService:
         if self._sessions is None:
             raise RuntimeError("SimulationRepository is unavailable.")
         await self._sessions.update_tick(session_id, tick)
+
+    def set_session_profile(self, session_id: int, profile: dict[str, Any]) -> None:
+        self._session_profiles[session_id] = profile
+        # Set initial price if provided in profile
+        if "initial_price" in profile and profile["initial_price"] is not None:
+            initial_price = float(profile["initial_price"])
+            if initial_price > 0:
+                self._last_price[session_id] = initial_price
+
+    async def join_session(self, session_id: int, user_id: int) -> dict[str, Any]:
+        """
+        Add user to session and create participant record (T046).
+
+        Returns participant info including participant_id and initial account balance.
+        """
+        if self._sessions is None:
+            raise RuntimeError("SimulationRepository is unavailable.")
+
+        participant_code = f"user-{user_id}"
+        participant_db_id = await self._sessions.ensure_participant(
+            session_id=session_id,
+            participant_code=participant_code,
+            participant_type="user",
+            player_id=None,
+            agent_profile_id=None,
+        )
+
+        # TODO: Initialize user account balance in a separate table when implemented
+        initial_balance = 100_000.0  # Default virtual currency
+
+        return {
+            "participant_id": participant_code,
+            "participant_db_id": participant_db_id,
+            "balance": initial_balance,
+            "session_id": session_id,
+        }
 
     # ------------------------------------------------------------------ #
     # Tick processing
@@ -198,7 +242,18 @@ class SimulationService:
             timings[label] = now - last_mark
             last_mark = now
 
+        # Start with provided orders (from API or other sources)
         player_orders = list(orders)
+
+        # Fetch pending user orders from Redis (Option B: Order Matching Integration)
+        user_orders = await self._cache.pop_pending_user_orders(session_code, max_count=100)
+        user_order_map: dict[str, dict] = {}  # order_id -> user_order_data
+        if user_orders:
+            logger.info(f"Processing {len(user_orders)} user orders for session {session_code} tick {tick}")
+            for user_order in user_orders:
+                user_order_map[user_order["order_id"]] = user_order
+            player_orders.extend(user_orders)
+
         agent_generated_orders: List[GeneratedOrder] = []
 
         if self._agents is not None and self._agents_enabled:
@@ -219,22 +274,58 @@ class SimulationService:
             )
 
         generated_orders: List[Dict] = []
+        behavior_counts: Dict[str, int] = defaultdict(int)
         for generated in agent_generated_orders:
+            # T031: Add timestamp to AI-generated orders
+            import time
+            timestamp_ns = time.time_ns()
+
             payload = {
                 "order_id": generated.order_id,
                 "participant_id": generated.participant_id,
+                "participant_code": generated.participant_code or generated.participant_id,
+                "participant_type": generated.participant_type,
                 "side": generated.side,
                 "type": generated.order_type,
                 "quantity": generated.quantity,
                 "price": generated.price,
+                "timestamp": timestamp_ns,  # T031: Timestamp for ordering
+                # Pool and behavior parameters for persistence
+                "pool_code": generated.pool_code,
+                "behavior_category": generated.behavior_category,
+                "profit_target": generated.profit_target,
+                "stop_loss": generated.stop_loss,
+                "herd_behavior_strength": generated.herd_behavior_strength,
+                "momentum_sensitivity": generated.momentum_sensitivity,
+                "risk_tolerance": generated.risk_tolerance,
             }
             generated_orders.append(payload)
-            self._order_participants[session_id][generated.order_id] = (
-                generated.participant_id,
-                None,
+            self._order_participants[session_id][generated.order_id] = {
+                "participant_id": generated.participant_id,
+                "participant_code": generated.participant_code
+                or generated.participant_id,
+                "participant_type": generated.participant_type,
+                "db_id": None,
+            }
+            behavior = payload.get("behavior_category")
+            if behavior:
+                behavior_counts[behavior] += 1
+
+        if settings.SIM_AUTOPLAY_VERBOSE and behavior_counts:
+            behavior_lines = ", ".join(f"{k}:{v}" for k, v in behavior_counts.items())
+            logger.info(
+                "Agent orders session=%s tick=%s %s",
+                session_code,
+                tick,
+                behavior_lines,
             )
 
         unified_orders = player_orders + generated_orders
+
+        # T029: Sort all orders by timestamp for price-time priority
+        # Ensure user orders and AI orders are processed in time order
+        unified_orders.sort(key=lambda x: x.get("timestamp", 0))
+
         order_count = len(unified_orders)
         mark("agent_orders")
 
@@ -265,8 +356,14 @@ class SimulationService:
             impact = self._impact.evaluate(order.side, filled_qty)
 
             participant_code = payload.get("participant_code") or order.participant_id
+            participant_type = payload.get("participant_type") or "user"
             db_id = participant_db_mapping.get(participant_code)
-            participants[order.order_id] = (order.participant_id, db_id)
+            participants[order.order_id] = {
+                "participant_id": order.participant_id,
+                "participant_code": participant_code,
+                "participant_type": participant_type,
+                "db_id": db_id,
+            }
 
             order_events.append(
                 OrderEventRecord(
@@ -290,8 +387,42 @@ class SimulationService:
             )
 
             for trade in trades:
-                buyer_id, buyer_db = participants.get(trade.buy_order_id, ("", None))
-                seller_id, seller_db = participants.get(trade.sell_order_id, ("", None))
+                buyer_info = participants.get(trade.buy_order_id, {})
+                seller_info = participants.get(trade.sell_order_id, {})
+                buyer_id = buyer_info.get("participant_id", "")
+                seller_id = seller_info.get("participant_id", "")
+                buyer_db = buyer_info.get("db_id")
+                seller_db = seller_info.get("db_id")
+                buyer_code = buyer_info.get("participant_code")
+                seller_code = seller_info.get("participant_code")
+                buyer_participant_type = buyer_info.get("participant_type")
+                seller_participant_type = seller_info.get("participant_type")
+
+                # Determine participant types (Step 4: buyer_type/seller_type)
+                def get_participant_type(
+                    order_id: str, participant_id: str, info: dict[str, Any]
+                ) -> str:
+                    """Determine if participant is user or AI agent type."""
+                    if info.get("participant_type") == "user" or order_id in user_order_map:
+                        return "user"
+                    # Check if it's an AI agent based on participant_id pattern
+                    if "retail" in participant_id.lower():
+                        return "ai_retail"
+                    elif "prop" in participant_id.lower():
+                        return "ai_prop"
+                    elif "inst" in participant_id.lower():
+                        return "ai_institutional"
+                    elif "maker" in participant_id.lower():
+                        return "ai_market_maker"
+                    else:
+                        return "ai_retail"  # Default for unknown AI agents
+
+                buyer_type = get_participant_type(
+                    trade.buy_order_id, buyer_id, buyer_info
+                )
+                seller_type = get_participant_type(
+                    trade.sell_order_id, seller_id, seller_info
+                )
 
                 trade_events.append(
                     TradeEventRecord(
@@ -308,8 +439,45 @@ class SimulationService:
                         price=trade.price,
                         quantity=trade.quantity,
                         created_at=ts,
+                        buyer_type=buyer_type,  # Step 4
+                        seller_type=seller_type,  # Step 4
                     )
                 )
+
+                fill_price = (
+                    trade.price
+                    if trade.price is not None and trade.price > 0
+                    else (self._last_price.get(session_id) or reference_price)
+                )
+                if fill_price is None or fill_price <= 0:
+                    fill_price = 1.0
+
+                if (
+                    self._agents is not None
+                    and buyer_participant_type == "agent"
+                    and buyer_code
+                ):
+                    await self._agents.record_trade(
+                        session_id,
+                        buyer_code,
+                        "BUY",
+                        trade.quantity,
+                        fill_price,
+                        order_id=trade.buy_order_id,
+                    )
+                if (
+                    self._agents is not None
+                    and seller_participant_type == "agent"
+                    and seller_code
+                ):
+                    await self._agents.record_trade(
+                        session_id,
+                        seller_code,
+                        "SELL",
+                        trade.quantity,
+                        fill_price,
+                        order_id=trade.sell_order_id,
+                    )
 
                 signed = (
                     trade.quantity if order.side == OrderSide.BUY else -trade.quantity
@@ -330,6 +498,43 @@ class SimulationService:
         timings["trades_persist"] = trades_elapsed
         last_mark = perf_counter()
 
+        # Step 3: Update user order statuses after matching
+        if user_order_map:
+            user_order_repo = UserOrderRepository(self._sessions._pool)
+            for order_event in order_events:
+                if order_event.order_code in user_order_map:
+                    # Map engine OrderStatus to user order status
+                    if order_event.status == "FILLED":
+                        status = "FILLED"
+                    elif order_event.status == "PARTIAL":
+                        status = "PARTIAL"
+                    elif order_event.status == "NEW":
+                        status = "NEW"
+                    else:
+                        status = "NEW"  # Default for active orders
+
+                    filled_qty = order_event.quantity - order_event.remaining_qty
+
+                    # Calculate average filled price from trades
+                    order_trades = [
+                        t for t in trade_events
+                        if t.buy_order_code == order_event.order_code
+                        or t.sell_order_code == order_event.order_code
+                    ]
+                    avg_price = None
+                    if order_trades and filled_qty > 0:
+                        total_value = sum(t.price * t.quantity for t in order_trades)
+                        avg_price = total_value / filled_qty
+
+                    # Update user_orders table
+                    await user_order_repo.update_order_status(
+                        order_id=order_event.order_code,
+                        status=status,
+                        filled_quantity=filled_qty,
+                        avg_filled_price=avg_price,
+                    )
+            mark("user_orders_update")
+
         if score_adjustments:
             await asyncio.gather(
                 *(
@@ -343,9 +548,42 @@ class SimulationService:
             session_id, tick, ts, engine, trade_events, total_signed_volume
         )
         pool_stats = self._agent_pools.collect_tick_stats(session_id)
+        if pool_stats:
+            self._latest_pool_stats[session_id] = pool_stats
+            retail_stat = pool_stats.get("retail")
+            if retail_stat is not None:
+                total_flow = retail_stat.gross_buy + retail_stat.gross_sell
+                history = self._retail_flow_history[session_id]
+                history.append(total_flow)
+                max_window = 60
+                if len(history) > max_window:
+                    del history[: len(history) - max_window]
         snapshot.features = self._build_snapshot_features(
             snapshot, trade_events, total_signed_volume, pool_stats
         )
+        profile = self._session_profiles.get(session_id, {})
+        initial_price = None
+        try:
+            initial_price = float(profile.get("initial_price"))
+        except (TypeError, ValueError):
+            initial_price = None
+        if (
+            settings.SIM_AUTOPLAY_VERBOSE
+            and initial_price
+            and initial_price > 0
+            and snapshot.last_price
+        ):
+            deviation_pct = (
+                (snapshot.last_price - initial_price) / initial_price
+            ) * 100.0
+            logger.info(
+                "Price gap session=%s tick=%s last=%.2f (%+.2f%% vs bootstrap) signedVol=%+.0f",
+                session_code,
+                tick,
+                snapshot.last_price,
+                deviation_pct,
+                total_signed_volume,
+            )
         if self._features is not None and self._use_feature_service:
             try:
                 external = await self._features.get_latest_features(session_id)
@@ -355,16 +593,27 @@ class SimulationService:
         if self._emotion is not None:
             snapshot.emotion = await self._emotion.get_sentiment(session_code)
         mark("snapshot_features")
-        if self._cache is not None and pool_stats:
-            payload = {
-                code: {
-                    "gross_buy": stat.gross_buy,
-                    "gross_sell": stat.gross_sell,
-                    "net_flow": stat.net_flow,
-                }
-                for code, stat in pool_stats.items()
+        pool_payload = {
+            code: {
+                "gross_buy": stat.gross_buy,
+                "gross_sell": stat.gross_sell,
+                "net_flow": stat.net_flow,
             }
-            await self._cache.publish_pool_stats(session_code, payload)
+            for code, stat in pool_stats.items()
+        }
+        if pool_payload and settings.SIM_AUTOPLAY_VERBOSE:
+            summary = ", ".join(
+                f"{code}:{data['net_flow']:+.0f}" for code, data in pool_payload.items()
+            )
+            logger.info(
+                "Pool flow session=%s tick=%s %s heat=%.2f",
+                session_code,
+                tick,
+                summary,
+                profile.get("retail_heat", 1.0),
+            )
+        if self._cache is not None and pool_payload:
+            await self._cache.publish_pool_stats(session_code, pool_payload)
         if self._market is not None:
             self._schedule_background(self._market.bulk_insert([snapshot]))
         mark("market_persist")
@@ -410,6 +659,7 @@ class SimulationService:
                 "emotion": snapshot.emotion,
                 "payload": snapshot.payload,
             },
+            "pool_stats": pool_payload,
         }
 
         total_elapsed = perf_counter() - overall_start
@@ -529,14 +779,44 @@ class SimulationService:
 
         best_bid = engine.order_book.best_bid()
         best_ask = engine.order_book.best_ask()
+        profile = dict(self._session_profiles.get(session_id) or {})
+        latest_pool_stats = self._latest_pool_stats.get(session_id)
+        if latest_pool_stats:
+            profile["pool_stats"] = {
+                code: {
+                    "gross_buy": stat.gross_buy,
+                    "gross_sell": stat.gross_sell,
+                    "net_flow": stat.net_flow,
+                }
+                for code, stat in latest_pool_stats.items()
+            }
+            retail_stat = latest_pool_stats.get("retail")
+            if retail_stat is not None:
+                profile["retail_net_flow"] = retail_stat.net_flow
         context = AgentContext(
             feature_provider=self._features,
             emotion_provider=self._emotion,
             last_price=self._last_price.get(session_id) or None,
             best_bid=best_bid[0] if best_bid else None,
             best_ask=best_ask[0] if best_ask else None,
+            profile=self._attach_retail_heat(session_id, profile),
         )
         return context
+
+    def _attach_retail_heat(
+        self, session_id: int, profile: dict[str, Any]
+    ) -> dict[str, Any]:
+        history = self._retail_flow_history.get(session_id) or []
+        if not history:
+            profile.setdefault("retail_heat", 1.0)
+            return profile
+        latest = history[-1]
+        average = sum(history) / len(history) if history else 0.0
+        heat = 1.0
+        if average > 0:
+            heat = max(0.0, latest / average)
+        profile["retail_heat"] = heat
+        return profile
 
     def _build_market_snapshot(
         self,
@@ -641,6 +921,13 @@ class SimulationService:
         if order_type == OrderType.LIMIT and price is None:
             raise ValueError("Limit order must supply price.")
 
+        # T031: Get timestamp from payload or generate if missing
+        timestamp_ns = data.get("timestamp", 0)
+        if timestamp_ns == 0:
+            # Generate nanosecond timestamp if not provided
+            import time
+            timestamp_ns = time.time_ns()
+
         order = Order(
             order_id=data["order_id"],
             session_id=session_id,
@@ -649,6 +936,7 @@ class SimulationService:
             order_type=order_type,
             quantity=float(data["quantity"]),
             price=float(price) if price is not None else None,
+            timestamp=timestamp_ns,  # T031: Set timestamp for price-time priority
         )
         return order
 
@@ -786,16 +1074,62 @@ class SimulationService:
             PropMomentumAgent,
             InstitutionalRebalanceAgent,
             MarketMakerAgent,
+            DepthQuoterAgent,
         )
 
         await self._agents.register(
-            session_id, RetailSentimentAgent(), pool_code="C"
+            session_id, RetailSentimentAgent(), pool_code="retail"
         )
-        await self._agents.register(session_id, PropMomentumAgent(), pool_code="B")
+        await self._agents.register(session_id, PropMomentumAgent(), pool_code="prop")
         await self._agents.register(
-            session_id, InstitutionalRebalanceAgent(), pool_code="A"
+            session_id, InstitutionalRebalanceAgent(), pool_code="institutional"
         )
-        await self._agents.register(session_id, MarketMakerAgent(), pool_code="B")
+        if settings.SIM_MARKET_MAKER_ENABLED:
+            await self._agents.register(
+                session_id, MarketMakerAgent(), pool_code="market_maker"
+            )
+        await self._agents.register(
+            session_id,
+            DepthQuoterAgent(
+                code="depth-A",
+                participant_prefix="depth-A",
+                base_quantity=180.0,
+                spread_bps=9.0,
+                level_spacing_bps=5.0,
+                levels=50,
+                decay=0.92,
+                refresh_interval=6,
+            ),
+            pool_code="institutional",
+        )
+        await self._agents.register(
+            session_id,
+            DepthQuoterAgent(
+                code="depth-B",
+                participant_prefix="depth-B",
+                base_quantity=90.0,
+                spread_bps=11.0,
+                level_spacing_bps=6.0,
+                levels=50,
+                decay=0.9,
+                refresh_interval=4,
+            ),
+            pool_code="prop",
+        )
+        await self._agents.register(
+            session_id,
+            DepthQuoterAgent(
+                code="depth-C",
+                participant_prefix="depth-C",
+                base_quantity=35.0,
+                spread_bps=13.0,
+                level_spacing_bps=7.0,
+                levels=50,
+                decay=0.88,
+                refresh_interval=3,
+            ),
+            pool_code="retail",
+        )
 
     # ------------------------------------------------------------------ #
     # Market state interactions
@@ -829,9 +1163,3 @@ class SimulationService:
 
 
 __all__ = ["SimulationService", "ImpactModel"]
-
-
-
-
-
-

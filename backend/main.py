@@ -33,6 +33,7 @@ try:
     from sim.emotion_service import EmotionService
     from sim.tasks import FeatureCalibrationTask
     from sim.agents import AgentRegistry
+    from sim.auto_runner import SimulationAutoRunner
 except ImportError:  # pragma: no cover
     SimulationCache = None  # type: ignore
     SimulationWorker = None  # type: ignore
@@ -41,6 +42,7 @@ except ImportError:  # pragma: no cover
     EmotionService = None  # type: ignore
     FeatureCalibrationTask = None  # type: ignore
     AgentRegistry = None  # type: ignore
+    SimulationAutoRunner = None  # type: ignore
 
 
 async def _feature_calibration_loop(task: FeatureCalibrationTask, interval_seconds: int) -> None:
@@ -65,6 +67,10 @@ async def lifespan(app: FastAPI):
         app.state.sim_cache = None
     if not hasattr(app.state, "sim_worker"):
         app.state.sim_worker = None
+    if not hasattr(app.state, "sim_service"):
+        app.state.sim_service = None
+    if not hasattr(app.state, "sim_auto_runner"):
+        app.state.sim_auto_runner = None
     if not hasattr(app.state, "sim_agent_registry"):
         app.state.sim_agent_registry = None
     if not hasattr(app.state, "sim_feature_service"):
@@ -178,10 +184,43 @@ async def lifespan(app: FastAPI):
             agent_registry=app.state.sim_agent_registry if settings.SIM_AGENTS_ENABLED else None,
             agents_enabled=settings.SIM_AGENTS_ENABLED,
         )
+        app.state.sim_service = sim_service
         app.state.sim_worker = SimulationWorker(sim_service)
         print("[+] Simulation worker ready")
     else:
         app.state.sim_worker = None
+
+    if (
+        SimulationAutoRunner is not None
+        and settings.SIM_AUTOPLAY_SESSIONS
+        and app.state.sim_pool
+        and app.state.sim_service
+    ):
+        auto_runner = SimulationAutoRunner(
+            service=app.state.sim_service,
+            session_repo=SimulationRepository(app.state.sim_pool),
+            session_codes=settings.SIM_AUTOPLAY_SESSIONS,
+            interval_ms=settings.SIM_AUTOPLAY_INTERVAL_MS,
+            mode=settings.SIM_AUTOPLAY_MODE,
+            cache=app.state.sim_cache,
+            verbose=settings.SIM_AUTOPLAY_VERBOSE,
+            bootstrap_price=settings.SIM_AUTOPLAY_BOOTSTRAP_PRICE,
+            bootstrap_spread=settings.SIM_AUTOPLAY_BOOTSTRAP_SPREAD,
+            bootstrap_volume=settings.SIM_AUTOPLAY_BOOTSTRAP_VOLUME,
+            session_profiles=settings.SIM_AUTOPLAY_SESSION_PROFILES,
+            agent_registry=app.state.sim_agent_registry if settings.SIM_AGENTS_ENABLED else None,
+        )
+        await auto_runner.start()
+        app.state.sim_auto_runner = auto_runner
+        print(
+            f"[+] Simulation autoplay runner enabled "
+            f"({len(settings.SIM_AUTOPLAY_SESSIONS)} sessions)"
+        )
+    elif settings.SIM_AUTOPLAY_SESSIONS:
+        print(
+            "[!] Simulation autoplay sessions configured but service or pool unavailable; "
+            "auto runner not started."
+        )
 
     if (
         FeatureCalibrationTask is not None
@@ -198,6 +237,13 @@ async def lifespan(app: FastAPI):
 
     # 鍏抽棴鏃舵墽琛?
     print("Shutting down...")
+
+    auto_runner = getattr(app.state, "sim_auto_runner", None)
+    if auto_runner is not None:
+        try:
+            await auto_runner.stop()
+        except Exception as exc:  # pragma: no cover - defensive
+            print(f"[!] Failed to stop simulation autoplay runner: {exc}")
     
     # 鍋滄 WebSocket 蹇冭烦妫€娴?
     print("[*] Stopping WebSocket heartbeat checker...")

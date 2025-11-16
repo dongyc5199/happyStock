@@ -106,16 +106,16 @@ class AgentPoolManager:
 
 DEFAULT_AGENT_POOLS: List[AgentPoolConfig] = [
     AgentPoolConfig(
-        code="A",
+        code="institutional",
         name="Institutions",
         weight=0.6,
-        initial_capital=1_000_000_000.0,
+        initial_capital=3_000_000_000.0,
         turnover_limit=0.02,
-        strategies=["institutional", "market_maker"],
-        description="Long-term funds, slow rotation.",
+        strategies=["institutional"],
+        description="Long-term funds, rebalance with minimal turnover.",
     ),
     AgentPoolConfig(
-        code="B",
+        code="prop",
         name="Momentum Funds",
         weight=0.25,
         initial_capital=400_000_000.0,
@@ -124,12 +124,21 @@ DEFAULT_AGENT_POOLS: List[AgentPoolConfig] = [
         description="Short-term opportunistic capital.",
     ),
     AgentPoolConfig(
-        code="C",
+        code="retail",
         name="Retail",
-        weight=0.15,
-        initial_capital=120_000_000.0,
+        weight=0.1,
+        initial_capital=150_000_000.0,
         turnover_limit=0.10,
         strategies=["retail"],
         description="High-frequency small orders following sentiment.",
+    ),
+    AgentPoolConfig(
+        code="market_maker",
+        name="Market Makers",
+        weight=0.05,
+        initial_capital=200_000_000.0,
+        turnover_limit=0.15,
+        strategies=["market_maker"],
+        description="Provides layered liquidity on both sides of the book.",
     ),
 ]

@@ -1,0 +1,630 @@
+openapi: 3.0.3
+info:
+  title: User Orders API
+  description: |
+    用户订单管理 API，支持用户在模拟交易会话中提交、查询和撤销订单。
+
+    **功能特性**:
+    - 异步订单处理（202 Accepted）
+    - WebSocket 实时成交通知
+    - 订单簿深度查询（50 档）
+
+    **认证**: 所有端点需要 JWT Bearer Token
+  version: 1.0.0
+  contact:
+    name: happyStock API Support
+    email: support@happystock.com
+
+servers:
+  - url: https://api.happystock.com
+    description: 生产环境
+  - url: http://localhost:8000
+    description: 本地开发环境
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: orders
+    description: 订单提交和管理
+  - name: orderbook
+    description: 订单簿查询
+
+paths:
+  /api/sim/sessions/{session_id}/orders:
+    post:
+      tags:
+        - orders
+      summary: 提交用户订单
+      description: |
+        提交市价单或限价单到指定模拟会话。订单将在下一个 tick 进入撮合引擎。
+
+        **验证规则**:
+        - 账户资金/库存充足
+        - 限价单价格在合理范围内（last_price ± 10%）
+        - 数量 >0 且符合最小交易单位（0.01）
+
+        **限流**: 10 orders/second/user
+      operationId: submitOrder
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderRequest'
+            examples:
+              marketBuy:
+                summary: 市价买单
+                value:
+                  side: BUY
+                  order_type: MARKET
+                  quantity: 100.0
+              limitSell:
+                summary: 限价卖单
+                value:
+                  side: SELL
+                  order_type: LIMIT
+                  quantity: 50.0
+                  price: 52.30
+      responses:
+        '202':
+          description: 订单已接受，将在下一 tick 处理
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderAcceptedResponse'
+              example:
+                status: accepted
+                order_id: user-12345-1699876543000-abc123
+                message: Order queued for next tick
+                estimated_execution_tick: 1234
+        '400':
+          description: 请求参数错误或验证失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                insufficientBalance:
+                  summary: 资金不足
+                  value:
+                    error: insufficient_balance
+                    required: 5025.0
+                    available: 3000.0
+                    message: Insufficient balance to place order
+                invalidPrice:
+                  summary: 价格超出范围
+                  value:
+                    error: price_out_of_range
+                    price: 100.0
+                    valid_range: [45.0, 55.0]
+                    message: Limit price must be within ±10% of last price (50.0)
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          description: 会话不存在或已关闭
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: session_not_found
+                session_id: 999
+                message: Simulation session does not exist or is closed
+        '429':
+          description: 请求频率超限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: rate_limit_exceeded
+                limit: 10
+                reset_at: '2025-11-11T10:30:01Z'
+                message: Too many orders submitted, please slow down
+
+    get:
+      tags:
+        - orders
+      summary: 查询用户订单列表
+      description: 获取用户在指定会话中的所有订单，支持按状态过滤和分页。
+      operationId: listOrders
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - name: status
+          in: query
+          description: 按状态过滤订单
+          required: false
+          schema:
+            type: string
+            enum: [PENDING, NEW, PARTIAL, FILLED, CANCELLED]
+          example: FILLED
+        - name: limit
+          in: query
+          description: 返回结果数量限制
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 50
+        - name: offset
+          in: query
+          description: 分页偏移量
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          example: 0
+      responses:
+        '200':
+          description: 订单列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          description: 会话不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/sim/sessions/{session_id}/orders/{order_id}:
+    get:
+      tags:
+        - orders
+      summary: 查询订单详情
+      description: 获取指定订单的详细信息，包括成交情况。
+      operationId: getOrder
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: 订单详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderDetail'
+              example:
+                order_id: user-12345-1699876543000-abc123
+                session_id: 123
+                user_id: 12345
+                side: BUY
+                order_type: LIMIT
+                quantity: 100.0
+                price: 50.25
+                status: PARTIAL
+                filled_quantity: 60.0
+                avg_filled_price: 50.28
+                timestamp: 1699876543000000000
+                created_at: '2025-11-11T10:30:00Z'
+                updated_at: '2025-11-11T10:30:02Z'
+                trades:
+                  - trade_id: trade-001
+                    price: 50.30
+                    quantity: 40.0
+                    counterparty_type: ai_prop
+                    executed_at: '2025-11-11T10:30:01Z'
+                  - trade_id: trade-002
+                    price: 50.25
+                    quantity: 20.0
+                    counterparty_type: ai_retail
+                    executed_at: '2025-11-11T10:30:02Z'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          description: 无权访问此订单
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: forbidden
+                message: You can only access your own orders
+        '404':
+          description: 订单不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - orders
+      summary: 撤销订单
+      description: |
+        撤销未完全成交的订单。只能撤销状态为 NEW 或 PARTIAL 的订单。
+
+        **注意**: 撤单在下一 tick 生效，当前 tick 仍可能部分成交。
+      operationId: cancelOrder
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: 撤单成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelOrderResponse'
+              example:
+                status: cancelled
+                order_id: user-12345-1699876543000-abc123
+                cancelled_quantity: 50.0
+                message: Order cancelled, remaining 50.0 units will not be executed
+        '400':
+          description: 订单状态不允许撤销
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: cannot_cancel
+                status: FILLED
+                message: Cannot cancel order with status FILLED
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          description: 无权撤销此订单
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 订单不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/sim/sessions/{session_id}/orderbook:
+    get:
+      tags:
+        - orderbook
+      summary: 查询订单簿深度
+      description: |
+        获取当前订单簿的买卖盘深度，最多显示 50 档。
+
+        **更新频率**: 每个 tick 更新一次，缓存 5 秒。
+      operationId: getOrderBook
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - name: depth
+          in: query
+          description: 返回深度档位数量
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+          example: 10
+      responses:
+        '200':
+          description: 订单簿快照
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderBookSnapshot'
+              example:
+                session_id: 123
+                tick: 1234
+                bids:
+                  - price: 50.25
+                    quantity: 500.0
+                    order_count: 12
+                  - price: 50.20
+                    quantity: 300.0
+                    order_count: 8
+                  - price: 50.15
+                    quantity: 450.0
+                    order_count: 15
+                asks:
+                  - price: 50.30
+                    quantity: 400.0
+                    order_count: 10
+                  - price: 50.35
+                    quantity: 600.0
+                    order_count: 15
+                  - price: 50.40
+                    quantity: 350.0
+                    order_count: 9
+                last_update_tick: 1234
+                timestamp: '2025-11-11T10:30:05Z'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          description: 会话不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 使用 JWT Token 进行认证，格式: `Authorization: Bearer <token>`
+
+  parameters:
+    SessionId:
+      name: session_id
+      in: path
+      description: 模拟会话ID
+      required: true
+      schema:
+        type: integer
+      example: 123
+
+    OrderId:
+      name: order_id
+      in: path
+      description: 订单ID
+      required: true
+      schema:
+        type: string
+      example: user-12345-1699876543000-abc123
+
+  schemas:
+    OrderRequest:
+      type: object
+      required:
+        - side
+        - order_type
+        - quantity
+      properties:
+        side:
+          type: string
+          enum: [BUY, SELL]
+          description: 买卖方向
+          example: BUY
+        order_type:
+          type: string
+          enum: [MARKET, LIMIT]
+          description: 订单类型
+          example: LIMIT
+        quantity:
+          type: number
+          format: double
+          minimum: 0.01
+          description: 订单数量
+          example: 100.0
+        price:
+          type: number
+          format: double
+          minimum: 0.01
+          description: 限价（LIMIT 订单必填）
+          example: 50.25
+      example:
+        side: BUY
+        order_type: LIMIT
+        quantity: 100.0
+        price: 50.25
+
+    OrderAcceptedResponse:
+      type: object
+      required:
+        - status
+        - order_id
+        - message
+        - estimated_execution_tick
+      properties:
+        status:
+          type: string
+          enum: [accepted]
+          example: accepted
+        order_id:
+          type: string
+          description: 订单唯一标识
+          example: user-12345-1699876543000-abc123
+        message:
+          type: string
+          example: Order queued for next tick
+        estimated_execution_tick:
+          type: integer
+          description: 预计执行的 tick 编号
+          example: 1234
+
+    OrderDetail:
+      type: object
+      required:
+        - order_id
+        - session_id
+        - user_id
+        - side
+        - order_type
+        - quantity
+        - status
+        - filled_quantity
+        - timestamp
+        - created_at
+        - updated_at
+      properties:
+        order_id:
+          type: string
+        session_id:
+          type: integer
+        user_id:
+          type: integer
+        side:
+          type: string
+          enum: [BUY, SELL]
+        order_type:
+          type: string
+          enum: [MARKET, LIMIT]
+        quantity:
+          type: number
+          format: double
+        price:
+          type: number
+          format: double
+          nullable: true
+        status:
+          type: string
+          enum: [PENDING, NEW, PARTIAL, FILLED, CANCELLED]
+        filled_quantity:
+          type: number
+          format: double
+        avg_filled_price:
+          type: number
+          format: double
+          nullable: true
+        timestamp:
+          type: integer
+          format: int64
+          description: 纳秒级时间戳
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        trades:
+          type: array
+          items:
+            $ref: '#/components/schemas/TradeInfo'
+
+    TradeInfo:
+      type: object
+      properties:
+        trade_id:
+          type: string
+        price:
+          type: number
+          format: double
+        quantity:
+          type: number
+          format: double
+        counterparty_type:
+          type: string
+          enum: [user, ai_retail, ai_prop, ai_institutional, ai_market_maker]
+          description: 对手方类型
+        executed_at:
+          type: string
+          format: date-time
+
+    OrderListResponse:
+      type: object
+      required:
+        - orders
+        - total
+        - limit
+        - offset
+      properties:
+        orders:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderDetail'
+        total:
+          type: integer
+          description: 总订单数
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    CancelOrderResponse:
+      type: object
+      required:
+        - status
+        - order_id
+        - cancelled_quantity
+      properties:
+        status:
+          type: string
+          enum: [cancelled]
+        order_id:
+          type: string
+        cancelled_quantity:
+          type: number
+          format: double
+          description: 已撤销的未成交数量
+        message:
+          type: string
+
+    OrderBookSnapshot:
+      type: object
+      required:
+        - session_id
+        - tick
+        - bids
+        - asks
+        - last_update_tick
+        - timestamp
+      properties:
+        session_id:
+          type: integer
+        tick:
+          type: integer
+        bids:
+          type: array
+          items:
+            $ref: '#/components/schemas/PriceLevel'
+          description: 买方价格档位（降序）
+        asks:
+          type: array
+          items:
+            $ref: '#/components/schemas/PriceLevel'
+          description: 卖方价格档位（升序）
+        last_update_tick:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+
+    PriceLevel:
+      type: object
+      required:
+        - price
+        - quantity
+        - order_count
+      properties:
+        price:
+          type: number
+          format: double
+          description: 价格档位
+        quantity:
+          type: number
+          format: double
+          description: 该档位总数量
+        order_count:
+          type: integer
+          description: 该档位订单数量
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: 错误代码
+        message:
+          type: string
+          description: 错误描述
+        details:
+          type: object
+          description: 额外错误详情
+          additionalProperties: true
+
+  responses:
+    UnauthorizedError:
+      description: 未授权或 Token 无效
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: unauthorized
+            message: Invalid or expired JWT token

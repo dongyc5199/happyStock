@@ -59,10 +59,10 @@ class FeatureService:
                 """
                 SELECT tick, metric_value
                   FROM metric_snapshot
-                 WHERE session_id = 
-                   AND metric_name = 
+                 WHERE session_id = $1
+                   AND metric_name = $2
                  ORDER BY ts DESC
-                 LIMIT 
+                 LIMIT $3
                 """,
                 session_id,
                 metric_name,
@@ -99,18 +99,20 @@ class FeatureService:
         query = """
             SELECT metric_name, metric_value
               FROM metric_snapshot
-             WHERE session_id = 
+             WHERE session_id = $1
                AND ts = (
                    SELECT MAX(ts)
                      FROM metric_snapshot
-                    WHERE session_id = 
+                    WHERE session_id = $1
                )
         """
         args: List[Any] = [session_id]
 
         if metrics:
             metric_list = list(metrics)
-            query += " AND metric_name = ANY()"
+            if not metric_list:
+                return {}
+            query += " AND metric_name = ANY($2)"
             args.append(metric_list)
 
         rows = []

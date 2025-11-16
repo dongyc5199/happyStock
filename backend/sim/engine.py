@@ -39,6 +39,7 @@ class Order:
     order_type: OrderType
     quantity: float
     price: Optional[float] = None
+    timestamp: int = 0  # T030: Nanosecond timestamp for price-time priority
     remaining: float = field(init=False)
     status: OrderStatus = field(default=OrderStatus.NEW)
 
@@ -59,13 +60,14 @@ class Trade:
 
 
 class OrderBook:
-    """Simple price-time priority orderbook."""
+    """Simple price-time priority orderbook with configurable depth limit."""
 
-    def __init__(self) -> None:
+    def __init__(self, max_depth: int = 50) -> None:
         self.bids: Dict[float, Deque[Order]] = {}
         self.asks: Dict[float, Deque[Order]] = {}
         self.bid_prices: List[float] = []
         self.ask_prices: List[float] = []
+        self.max_depth = max(max_depth, 1)  # Ensure at least 1 level
 
     # ------------------------------------------------------------------ #
     # Order management
@@ -86,10 +88,26 @@ class OrderBook:
         assert order.price is not None
         level = book.get(order.price)
         if level is None:
+            # Check if we're at max depth before adding a new price level
+            if len(price_levels) >= self.max_depth:
+                # Remove the worst price level (furthest from best)
+                worst_price = price_levels[-1]
+                self._remove_price(worst_price, book, price_levels)
             book[order.price] = deque([order])
             self._insert_price(order.price, price_levels, reverse=reverse)
         else:
-            level.append(order)
+            # T029/T030: Insert order in timestamp order (time priority)
+            # Find the correct position based on timestamp
+            inserted = False
+            for i, existing_order in enumerate(level):
+                if order.timestamp < existing_order.timestamp:
+                    # Insert before this order (earlier timestamp)
+                    level.insert(i, order)
+                    inserted = True
+                    break
+            if not inserted:
+                # Append to end (latest timestamp or equal)
+                level.append(order)
 
     def pop_best(self, side: OrderSide) -> Optional[Order]:
         book = self.bids if side == OrderSide.BUY else self.asks
@@ -143,6 +161,37 @@ class OrderBook:
         price = self.ask_prices[0]
         qty = sum(order.remaining for order in self.asks[price] if order.is_active)
         return (price, qty)
+
+    def get_depth_snapshot(self, depth: Optional[int] = None) -> Dict[str, List[Tuple[float, float, int]]]:
+        """
+        Return aggregated orderbook depth snapshot.
+
+        Parameters
+        ----------
+        depth : Optional number of price levels to return (default: all available up to max_depth)
+
+        Returns
+        -------
+        Dict with 'bids' and 'asks' keys, each containing list of (price, total_quantity, order_count) tuples.
+        Bids are sorted descending (best first), asks ascending (best first).
+        """
+        limit = min(depth or self.max_depth, self.max_depth)
+
+        def aggregate_levels(prices: List[float], book: Dict[float, Deque[Order]]) -> List[Tuple[float, float, int]]:
+            result = []
+            for price in prices[:limit]:
+                orders = book.get(price, deque())
+                active_orders = [o for o in orders if o.is_active]
+                if active_orders:
+                    total_qty = sum(o.remaining for o in active_orders)
+                    order_count = len(active_orders)
+                    result.append((price, total_qty, order_count))
+            return result
+
+        return {
+            "bids": aggregate_levels(self.bid_prices, self.bids),
+            "asks": aggregate_levels(self.ask_prices, self.asks),
+        }
 
 
 class MatchingEngine:

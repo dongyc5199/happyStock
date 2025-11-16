@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 from urllib.parse import quote_plus
 
 from pydantic_settings import BaseSettings
+from pydantic import Field
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -60,6 +61,17 @@ class Settings(BaseSettings):
     SIM_SIGNAL_SESSION: Optional[str] = None
     SIM_SIGNAL_REDIS_URL: Optional[str] = None
     SIM_SIGNAL_DRIFT_SCALE: float = 0.0005
+    SIM_AUTOPLAY_SESSIONS: list[str] = Field(default_factory=list)
+    SIM_AUTOPLAY_INTERVAL_MS: int = 500
+    SIM_AUTOPLAY_MODE: str = "autoplay"
+    SIM_AUTOPLAY_VERBOSE: bool = False
+    SIM_AUTOPLAY_BOOTSTRAP_PRICE: float = 100.0
+    SIM_AUTOPLAY_BOOTSTRAP_SPREAD: float = 0.4  # currency units
+    SIM_AUTOPLAY_BOOTSTRAP_VOLUME: float = 20.0
+    SIM_AUTOPLAY_SESSION_PROFILES: dict[str, dict[str, Any]] = Field(
+        default_factory=dict
+    )
+    SIM_MARKET_MAKER_ENABLED: bool = True
 
     # JWT / auth
     SECRET_KEY: str = "your-secret-key-change-this-in-production"
