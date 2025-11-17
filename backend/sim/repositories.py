@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
 import uuid
 from time import perf_counter
 from typing import Any, Iterable, Optional, Sequence
@@ -45,6 +47,9 @@ def _normalize_uuid(value: Optional[str]) -> Optional[uuid.UUID]:
         return uuid.UUID(str(value))
     except (ValueError, TypeError):
         return None
+
+
+logger = logging.getLogger(__name__)
 
 
 class SimulationRepository:
@@ -162,8 +167,44 @@ class SimulationRepository:
                    updated_at = NOW()
              WHERE id = $1
         """
+        threshold_ms = float(
+            os.getenv("SIM_SLOW_UPDATE_TICK_THRESHOLD_MS", "50.0")
+        )
+        explain_enabled = os.getenv("SIM_EXPLAIN_TICK", "0").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+
+        start = perf_counter()
         async with self._pool.acquire() as conn:  # type: ignore[attr-defined]
             await conn.execute(query, session_id, tick)
+        elapsed_ms = (perf_counter() - start) * 1000.0
+
+        if elapsed_ms > threshold_ms:
+            logger.warning(
+                "simulation.update_tick slow query: session_id=%s tick=%s elapsed_ms=%.2f",
+                session_id,
+                tick,
+                elapsed_ms,
+            )
+            if explain_enabled:
+                explain_sql = (
+                    "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) " + query
+                )
+                try:
+                    async with self._pool.acquire() as conn:  # type: ignore[attr-defined]
+                        plan = await conn.fetchval(explain_sql, session_id, tick)
+                    logger.warning(
+                        "simulation.update_tick explain: session_id=%s tick=%s plan=%s",
+                        session_id,
+                        tick,
+                        plan,
+                    )
+                except Exception as exc:  # pragma: no cover - diagnostics only
+                    logger.warning(
+                        "simulation.update_tick EXPLAIN failed: %s", exc
+                    )
 
     async def adjust_participant_score(self, participant_id: int, delta: float) -> None:
         _ensure_asyncpg()

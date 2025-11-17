@@ -13,7 +13,6 @@ aiosqlite = "*"
 aioredis = "*"
 apscheduler = "*"
 email-validator = "*"
-pydantic-settings = "*"
 numpy = "*"
 websockets = "*"
 aiosmtplib = "*"
@@ -24,6 +23,7 @@ isort = "*"
 black = "*"
 gunicorn = "*"
 locust = "*"
+pydantic-settings = "*"
 
 [dev-packages]
 pytest = "*"
@@ -31,4 +31,4 @@ pytest-asyncio = "*"
 httpx = "*"
 
 [requires]
-python_version = "3.13"
+python_version = "3.12"

@@ -72,6 +72,7 @@ class Settings(BaseSettings):
         default_factory=dict
     )
     SIM_MARKET_MAKER_ENABLED: bool = True
+    SIM_TEST_REAL_BOUNDARY: bool = False
 
     # JWT / auth
     SECRET_KEY: str = "your-secret-key-change-this-in-production"

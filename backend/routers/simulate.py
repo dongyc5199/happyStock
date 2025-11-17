@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
+import json
 from typing import List
 import uuid
 
@@ -281,17 +282,130 @@ async def websocket_sim_ticks(
         await websocket.close(code=1011, reason=str(exc))
 
 
+@router.websocket("/ws/events")
+async def websocket_sim_events(
+    websocket: WebSocket,
+    session_id: int = Query(..., ge=1),
+) -> None:
+    await websocket.accept()
+    cache: SimulationCache | None = getattr(websocket.app.state, "sim_cache", None)
+    service: SimulationService | None = getattr(websocket.app.state, "sim_service", None)
+    if cache is None or service is None:
+        await websocket.close(code=1011, reason="Simulation streaming unavailable")
+        return
+
+    session_code = service._session_codes.get(session_id)  # type: ignore[attr-defined]
+    if session_code is None:
+        pool = getattr(websocket.app.state, "sim_pool", None)
+        if pool is None:
+            await websocket.close(code=4404, reason="Session not available")
+            return
+        session_repo = SimulationRepository(pool)
+        session = await session_repo.fetch_session_by_id(session_id)
+        if session is None:
+            await websocket.close(code=4404, reason=f"Session {session_id} not found")
+            return
+        session_code = session.session_code
+        service._session_codes[session_id] = session_code  # type: ignore[attr-defined]
+
+    try:
+        subscribe_msg = await websocket.receive_json()
+    except WebSocketDisconnect:
+        return
+    except Exception as exc:  # pragma: no cover
+        await websocket.close(code=1003, reason=f"Invalid subscribe payload: {exc}")
+        return
+
+    if (subscribe_msg or {}).get("action") != "subscribe":
+        await websocket.close(code=1008, reason="Subscribe action required")
+        return
+
+    raw_channels = subscribe_msg.get("channels") or subscribe_msg.get("channel")
+    if raw_channels is None:
+        await websocket.close(code=1008, reason="channels field is required")
+        return
+    if isinstance(raw_channels, str):
+        channels = [raw_channels]
+    else:
+        channels = [str(item) for item in raw_channels if item]
+
+    user_ids: set[str] = set()
+    allowed_channels: set[str] = set()
+    for channel in channels:
+        if channel == "user_orders":
+            requested_ids = subscribe_msg.get("user_ids")
+            if requested_ids is None:
+                user_id = subscribe_msg.get("user_id")
+                requested_ids = [user_id] if user_id else None
+            if not requested_ids:
+                await websocket.close(
+                    code=1008, reason="user_id is required for user_orders channel"
+                )
+                return
+            user_ids.update(str(uid) for uid in requested_ids if uid is not None)
+            allowed_channels.add("user_orders")
+        elif channel == "orderbook":
+            allowed_channels.add("orderbook")
+        else:
+            await websocket.close(
+                code=1008, reason=f"Unsupported channel: {channel}"
+            )
+            return
+
+    if not allowed_channels:
+        await websocket.close(code=1008, reason="No valid channels requested")
+        return
+
+    last_id = subscribe_msg.get("last_event_id") or subscribe_msg.get("from") or "$"
+    if not isinstance(last_id, str):
+        last_id = "$"
+
+    await websocket.send_json(
+        {
+            "type": "subscribed",
+            "session_id": session_id,
+            "session_code": session_code,
+            "channels": sorted(allowed_channels),
+            "last_event_id": last_id,
+        }
+    )
+
+    try:
+        while True:
+            events = await cache.read_events(
+                session_code, last_id=last_id, block_ms=1000, count=50
+            )
+            if not events:
+                continue
+            for event_id, raw in events:
+                last_id = event_id
+                payload_json = raw.get("payload")
+                channel_name = raw.get("channel")
+                try:
+                    payload = json.loads(payload_json) if payload_json else raw
+                except json.JSONDecodeError:
+                    continue
+                channel = payload.get("channel") or channel_name
+                if channel not in allowed_channels:
+                    continue
+                if channel == "user_orders":
+                    user_id = str(payload.get("user_id")) if payload.get("user_id") is not None else None
+                    if not user_id or user_id not in user_ids:
+                        continue
+                await websocket.send_json(payload)
+    except WebSocketDisconnect:
+        return
+    except Exception as exc:  # pragma: no cover
+        await websocket.close(code=1011, reason=str(exc))
+
+
 @router.post("/step", response_model=TickResponse, status_code=status.HTTP_202_ACCEPTED)
 async def step_simulation(
     payload: TickRequest,
     request: Request,
     worker=Depends(get_worker),
 ) -> TickResponse:
-    if not payload.orders:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="orders must not be empty"
-        )
-
+    # Allow empty orders - AI agents will generate orders automatically
     tick_timestamp = payload.timestamp or datetime.now(timezone.utc)
     trace_id = request.headers.get("X-Trace-Id") or str(uuid.uuid4())
 

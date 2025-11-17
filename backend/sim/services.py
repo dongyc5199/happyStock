@@ -126,8 +126,10 @@ class SimulationService:
         self._participant_semaphore = asyncio.Semaphore(
             max(1, int(os.getenv("SIM_PARTICIPANT_CONCURRENCY", "10")))
         )
+        self._orderbook_depth = max(1, int(os.getenv("SIM_WS_ORDERBOOK_DEPTH", "50")))
         self._background_tasks: set[asyncio.Task] = set()
         self._coach_builder = CoachInsightBuilder()
+        self._enabled_agent_pools = self._parse_enabled_agent_pools()
         threshold_ms = float(os.getenv("SIM_SLOW_TICK_THRESHOLD_MS", "1000"))
         self._slow_tick_threshold = threshold_ms / 1000.0 if threshold_ms > 0 else None
         log_path = os.getenv("SIM_SLOW_TICK_LOG", "backend/logs/slow_ticks.log")
@@ -489,6 +491,20 @@ class SimulationService:
                     score_adjustments[seller_id] += trade.quantity
 
         mark("engine")
+
+        trade_fill_stats: dict[str, dict[str, float]] = defaultdict(
+            lambda: {"qty": 0.0, "value": 0.0}
+        )
+        for trade in trade_events:
+            trade_fill_stats[trade.buy_order_code]["qty"] += trade.quantity
+            trade_fill_stats[trade.buy_order_code]["value"] += (
+                trade.quantity * trade.price
+            )
+            trade_fill_stats[trade.sell_order_code]["qty"] += trade.quantity
+            trade_fill_stats[trade.sell_order_code]["value"] += (
+                trade.quantity * trade.price
+            )
+
         orders_elapsed = trades_elapsed = 0.0
         if order_events or trade_events:
             orders_elapsed, trades_elapsed = await self._orders.record_events(
@@ -501,38 +517,56 @@ class SimulationService:
         # Step 3: Update user order statuses after matching
         if user_order_map:
             user_order_repo = UserOrderRepository(self._sessions._pool)
+            user_events: list[dict[str, Any]] = []
             for order_event in order_events:
-                if order_event.order_code in user_order_map:
-                    # Map engine OrderStatus to user order status
-                    if order_event.status == "FILLED":
-                        status = "FILLED"
-                    elif order_event.status == "PARTIAL":
-                        status = "PARTIAL"
-                    elif order_event.status == "NEW":
-                        status = "NEW"
-                    else:
-                        status = "NEW"  # Default for active orders
+                meta = user_order_map.get(order_event.order_code)
+                if meta is None:
+                    continue
 
-                    filled_qty = order_event.quantity - order_event.remaining_qty
+                status = order_event.status
+                if status not in {"FILLED", "PARTIAL", "CANCELLED"}:
+                    status = "NEW"
 
-                    # Calculate average filled price from trades
-                    order_trades = [
-                        t for t in trade_events
-                        if t.buy_order_code == order_event.order_code
-                        or t.sell_order_code == order_event.order_code
-                    ]
-                    avg_price = None
-                    if order_trades and filled_qty > 0:
-                        total_value = sum(t.price * t.quantity for t in order_trades)
-                        avg_price = total_value / filled_qty
+                stats = trade_fill_stats.get(order_event.order_code)
+                filled_qty = (
+                    stats["qty"]
+                    if stats and stats["qty"] > 0
+                    else order_event.quantity - order_event.remaining_qty
+                )
+                avg_price = (
+                    stats["value"] / stats["qty"] if stats and stats["qty"] > 0 else None
+                )
 
-                    # Update user_orders table
-                    await user_order_repo.update_order_status(
-                        order_id=order_event.order_code,
-                        status=status,
-                        filled_quantity=filled_qty,
-                        avg_filled_price=avg_price,
-                    )
+                await user_order_repo.update_order_status(
+                    order_id=order_event.order_code,
+                    status=status,
+                    filled_quantity=filled_qty,
+                    avg_filled_price=avg_price,
+                )
+
+                if filled_qty <= 0 and status == "NEW":
+                    continue
+
+                user_event = {
+                    "channel": "user_orders",
+                    "type": "order_filled" if status == "FILLED" else "order_update",
+                    "session_id": session_id,
+                    "order_id": order_event.order_code,
+                    "user_id": str(meta.get("user_id")) if meta.get("user_id") is not None else None,
+                    "participant_id": order_event.participant_id,
+                    "status": status,
+                    "filled_quantity": filled_qty,
+                    "remaining_quantity": order_event.remaining_qty,
+                    "avg_price": avg_price,
+                    "timestamp": ts.isoformat(),
+                    "tick": tick,
+                }
+                user_events.append(user_event)
+
+            if user_events:
+                for event in user_events:
+                    if event.get("user_id"):
+                        self._publish_stream_event(session_code, event)
             mark("user_orders_update")
 
         if score_adjustments:
@@ -561,6 +595,31 @@ class SimulationService:
         snapshot.features = self._build_snapshot_features(
             snapshot, trade_events, total_signed_volume, pool_stats
         )
+        orderbook_depth = engine.order_book.get_depth_snapshot(depth=self._orderbook_depth)
+        orderbook_payload = {
+            "session_id": session_id,
+            "session_code": session_code,
+            "tick": tick,
+            "timestamp": ts.isoformat(),
+            "bids": [
+                {"price": price, "quantity": qty, "order_count": count}
+                for price, qty, count in orderbook_depth["bids"]
+            ],
+            "asks": [
+                {"price": price, "quantity": qty, "order_count": count}
+                for price, qty, count in orderbook_depth["asks"]
+            ],
+        }
+        if self._cache is not None:
+            self._schedule_background(
+                self._cache.cache_orderbook_snapshot(
+                    session_code, orderbook_payload, ttl_seconds=5
+                )
+            )
+        orderbook_event = orderbook_payload.copy()
+        orderbook_event.update({"channel": "orderbook", "type": "orderbook_snapshot"})
+        self._publish_stream_event(session_code, orderbook_event)
+
         profile = self._session_profiles.get(session_id, {})
         initial_price = None
         try:
@@ -718,6 +777,38 @@ class SimulationService:
                 logger.error("Background task failed: %s", exc)
 
         task.add_done_callback(_done)
+
+    def _publish_stream_event(self, session_code: str, payload: dict[str, Any]) -> None:
+        """Enqueue structured payload into the Redis stream for WebSocket delivery."""
+        if self._cache is None:
+            return
+
+        channel = payload.get("channel", "broadcast")
+        event = payload.copy()
+        event.setdefault("session_code", session_code)
+
+        def _default(obj: Any) -> str:
+            if isinstance(obj, datetime):
+                return obj.isoformat()
+            return str(obj)
+
+        try:
+            serialized = json.dumps(event, default=_default, ensure_ascii=False)
+        except TypeError:  # pragma: no cover - unexpected payloads
+            serialized = json.dumps(
+                {"channel": channel, "error": "serialization_failed"},
+                ensure_ascii=False,
+            )
+
+        self._schedule_background(
+            self._cache.append_event(
+                session_code,
+                {
+                    "channel": channel,
+                    "payload": serialized,
+                },
+            )
+        )
 
     async def _emit_coach_logs(
         self,
@@ -1077,59 +1168,69 @@ class SimulationService:
             DepthQuoterAgent,
         )
 
-        await self._agents.register(
-            session_id, RetailSentimentAgent(), pool_code="retail"
-        )
-        await self._agents.register(session_id, PropMomentumAgent(), pool_code="prop")
-        await self._agents.register(
-            session_id, InstitutionalRebalanceAgent(), pool_code="institutional"
-        )
-        if settings.SIM_MARKET_MAKER_ENABLED:
+        enabled = self._enabled_agent_pools
+
+        if "retail" in enabled:
+            await self._agents.register(
+                session_id, RetailSentimentAgent(), pool_code="retail"
+            )
+        if "prop" in enabled:
+            await self._agents.register(
+                session_id, self._build_prop_agent(PropMomentumAgent), pool_code="prop"
+            )
+        if "institutional" in enabled:
+            await self._agents.register(
+                session_id, InstitutionalRebalanceAgent(), pool_code="institutional"
+            )
+        if settings.SIM_MARKET_MAKER_ENABLED and "market_maker" in enabled:
             await self._agents.register(
                 session_id, MarketMakerAgent(), pool_code="market_maker"
             )
-        await self._agents.register(
-            session_id,
-            DepthQuoterAgent(
-                code="depth-A",
-                participant_prefix="depth-A",
-                base_quantity=180.0,
-                spread_bps=9.0,
-                level_spacing_bps=5.0,
-                levels=50,
-                decay=0.92,
-                refresh_interval=6,
-            ),
-            pool_code="institutional",
-        )
-        await self._agents.register(
-            session_id,
-            DepthQuoterAgent(
-                code="depth-B",
-                participant_prefix="depth-B",
-                base_quantity=90.0,
-                spread_bps=11.0,
-                level_spacing_bps=6.0,
-                levels=50,
-                decay=0.9,
-                refresh_interval=4,
-            ),
-            pool_code="prop",
-        )
-        await self._agents.register(
-            session_id,
-            DepthQuoterAgent(
-                code="depth-C",
-                participant_prefix="depth-C",
-                base_quantity=35.0,
-                spread_bps=13.0,
-                level_spacing_bps=7.0,
-                levels=50,
-                decay=0.88,
-                refresh_interval=3,
-            ),
-            pool_code="retail",
-        )
+        if "depth" in enabled and "institutional" in enabled:
+            await self._agents.register(
+                session_id,
+                DepthQuoterAgent(
+                    code="depth-A",
+                    participant_prefix="depth-A",
+                    base_quantity=180.0,
+                    spread_bps=9.0,
+                    level_spacing_bps=5.0,
+                    levels=50,
+                    decay=0.92,
+                    refresh_interval=6,
+                ),
+                pool_code="institutional",
+            )
+        if "depth" in enabled and "prop" in enabled:
+            await self._agents.register(
+                session_id,
+                DepthQuoterAgent(
+                    code="depth-B",
+                    participant_prefix="depth-B",
+                    base_quantity=90.0,
+                    spread_bps=11.0,
+                    level_spacing_bps=6.0,
+                    levels=50,
+                    decay=0.9,
+                    refresh_interval=4,
+                ),
+                pool_code="prop",
+            )
+        if "depth" in enabled and "retail" in enabled:
+            await self._agents.register(
+                session_id,
+                DepthQuoterAgent(
+                    code="depth-C",
+                    participant_prefix="depth-C",
+                    base_quantity=35.0,
+                    spread_bps=13.0,
+                    level_spacing_bps=7.0,
+                    levels=50,
+                    decay=0.88,
+                    refresh_interval=3,
+                ),
+                pool_code="retail",
+            )
 
     # ------------------------------------------------------------------ #
     # Market state interactions
@@ -1159,6 +1260,85 @@ class SimulationService:
     ) -> list[LeaderboardEntry]:
         return await self._cache.top_leaderboard(
             session_code, limit=limit, reverse=reverse
+        )
+
+    @staticmethod
+    def _parse_enabled_agent_pools() -> set[str]:
+        default = {"retail", "prop", "institutional", "market_maker", "depth"}
+        raw = os.getenv("SIM_AGENT_POOLS")
+        if not raw or raw.strip().lower() in {"", "all", "default"}:
+            return default
+        tokens = {
+            token.strip().lower()
+            for token in raw.split(",")
+            if token.strip()
+        }
+        allowed = tokens & default
+        return allowed or default
+
+    @staticmethod
+    def _env_flag(name: str, default: bool = False) -> bool:
+        value = os.getenv(name)
+        if value is None:
+            return default
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+
+    @staticmethod
+    def _env_int(name: str, default: int) -> int:
+        value = os.getenv(name)
+        if value is None:
+            return default
+        try:
+            return int(value)
+        except ValueError:
+            return default
+
+    @staticmethod
+    def _env_float(name: str, default: float) -> float:
+        value = os.getenv(name)
+        if value is None:
+            return default
+        try:
+            return float(value)
+        except ValueError:
+            return default
+
+    def _prop_override_enabled(self) -> bool:
+        if self._env_flag("SIM_PROP_BURST_MODE"):
+            return True
+        return self._enabled_agent_pools == {"prop"}
+
+    def _build_prop_agent(self, prop_cls):
+        if not self._prop_override_enabled():
+            return prop_cls()
+
+        interval = max(1, self._env_int("SIM_PROP_BURST_INTERVAL", 30))
+        duration = max(1, self._env_int("SIM_PROP_BURST_DURATION", 5))
+        profit_target = self._env_float("SIM_PROP_PROFIT_TARGET", 0.05)
+        stop_loss = self._env_float("SIM_PROP_STOP_LOSS", 0.2)
+        volatility_trigger = self._env_float("SIM_PROP_VOLATILITY_TRIGGER", 0.0)
+        noise = self._env_float("SIM_PROP_NOISE", 0.0)
+        mean_reversion = self._env_float("SIM_PROP_MEAN_REVERSION", 0.0)
+        burst_multiplier = self._env_float("SIM_PROP_BURST_MULTIPLIER", 4.0)
+        base_quantity = self._env_float("SIM_PROP_BASE_QUANTITY", 180.0)
+        momentum_sensitivity = self._env_float("SIM_PROP_MOMENTUM_SENSITIVITY", 1.0)
+        herd_strength = self._env_float("SIM_PROP_HERD_STRENGTH", 0.8)
+
+        return prop_cls(
+            code=os.getenv("SIM_PROP_AGENT_CODE", "prop"),
+            volatility_trigger=volatility_trigger,
+            base_quantity=base_quantity,
+            noise=noise,
+            burst_interval_ticks=(interval, interval),
+            burst_duration_range=(duration, duration),
+            burst_multiplier=burst_multiplier,
+            profit_target=profit_target,
+            stop_loss=stop_loss,
+            momentum_sensitivity=momentum_sensitivity,
+            herd_behavior_strength=herd_strength,
+            mean_reversion_strength=mean_reversion,
+            cooldown_range=(interval, interval),
+            strict_cooldown_range=(interval * 2, interval * 2),
         )
 
 

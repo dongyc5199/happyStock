@@ -1,18 +1,28 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 import sys
 import unittest
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, List, Sequence, Tuple
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from sim.agents import AgentRegistry, AgentStrategy, AgentContext, GeneratedOrder
+from sim.agents import (
+    AgentRegistry,
+    AgentStrategy,
+    AgentContext,
+    GeneratedOrder,
+    PropMomentumAgent,
+)
 from sim.cache import LeaderboardEntry
 from sim.services import ImpactModel, SimulationService
 from sim.types import (
@@ -134,6 +144,9 @@ class DummyCache:
         self.tick_updates: list[tuple[str, int]] = []
         self.coach_logs: list[dict[str, Any]] = []
         self.pool_stats: dict[str, dict[str, float]] = {}
+        self.pending_orders: list[dict[str, Any]] = []
+        self.stream_events: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        self.cached_orderbook: dict[str, Any] | None = None
 
     async def update_leaderboard(
         self, session: str, participant_id: str, score: float
@@ -170,6 +183,33 @@ class DummyCache:
 
     async def enqueue_coach_log(self, payload: dict[str, Any], *, maxlen: int = 1000) -> None:  # noqa: ARG002
         self.coach_logs.append(payload)
+
+    async def pop_pending_user_orders(
+        self,
+        session: str,
+        max_count: int = 100,
+    ) -> list[dict[str, Any]]:
+        orders = list(self.pending_orders[:max_count])
+        self.pending_orders = self.pending_orders[max_count:]
+        return orders
+
+    async def append_event(
+        self,
+        session: str,
+        event: dict[str, Any],
+        *,
+        maxlen: int = 1000,
+    ) -> str:  # noqa: ARG002
+        self.stream_events.setdefault(session, []).append(event)
+        return f"{session}:{len(self.stream_events[session])}"
+
+    async def cache_orderbook_snapshot(
+        self,
+        session: str,
+        snapshot: dict[str, Any],
+        ttl_seconds: int = 5,
+    ) -> None:  # noqa: ARG002
+        self.cached_orderbook = snapshot
 
     def _refresh_leaderboard(self) -> None:
         self.leaderboard = [
@@ -209,8 +249,20 @@ class SimulationServiceTests(unittest.IsolatedAsyncioTestCase):
             tasks = list(service._background_tasks)
             await asyncio.gather(*tasks)
 
+    def _env_snapshot(self, keys: Sequence[str]) -> dict[str, str | None]:
+        return {key: os.environ.get(key) for key in keys}
+
+    def _restore_env(self, snapshot: dict[str, str | None]) -> None:
+        for key, value in snapshot.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
     def _service(
         self,
+        *,
+        agent_registry: AgentRegistry | None = None,
     ) -> tuple[
         SimulationService,
         DummyMarketRepo,
@@ -230,6 +282,7 @@ class SimulationServiceTests(unittest.IsolatedAsyncioTestCase):
             order_repo=order_repo,
             cache=cache,
             agent_log_repo=agent_logs,
+            agent_registry=agent_registry,
             impact_model=ImpactModel(alpha=0.5, beta=0.5, liquidity=1000.0),
             agents_enabled=True,
         )
@@ -407,6 +460,107 @@ class SimulationServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["status"], "accepted")
         self.assertTrue(result["trace_id"].startswith("session-1-"))
         self.assertTrue(all(evt.participant_db_id is not None for evt in order_repo.orders))
+
+    async def test_agent_pool_override_enables_prop_only(self) -> None:
+        env_keys = [
+            "SIM_AGENT_POOLS",
+            "SIM_PROP_BURST_MODE",
+            "SIM_PROP_BURST_INTERVAL",
+            "SIM_PROP_BURST_DURATION",
+            "SIM_PROP_PROFIT_TARGET",
+        ]
+        snapshot = self._env_snapshot(env_keys)
+        self.addCleanup(lambda: self._restore_env(snapshot))
+        os.environ["SIM_AGENT_POOLS"] = "prop"
+        os.environ["SIM_PROP_BURST_MODE"] = "1"
+        os.environ["SIM_PROP_BURST_INTERVAL"] = "30"
+        os.environ["SIM_PROP_BURST_DURATION"] = "4"
+        os.environ["SIM_PROP_PROFIT_TARGET"] = "0.05"
+
+        registry = AgentRegistry()
+        service, *_ = self._service(agent_registry=registry)
+        await service._ensure_default_agents(session_id=77)
+
+        agents = registry._agents.get(77, [])
+        self.assertEqual(len(agents), 1)
+        registered = agents[0]
+        self.assertEqual(registered.pool_code, "prop")
+        self.assertIsInstance(registered.strategy, PropMomentumAgent)
+        self.assertEqual(registered.strategy._burst_interval, (30, 30))
+        self.assertAlmostEqual(registered.strategy.profit_target, 0.05, places=3)
+
+    async def test_process_tick_emits_user_order_event(self) -> None:
+        service, _, order_repo, session_repo, cache, _ = self._service()
+        cache.pending_orders = [
+            {
+                "order_id": "user-order-1",
+                "participant_id": "user-42",
+                "participant_code": "user-42",
+                "participant_type": "user",
+                "side": "BUY",
+                "type": "LIMIT",
+                "quantity": 3.0,
+                "price": 101.0,
+                "timestamp": 1,
+                "user_id": "42",
+            }
+        ]
+        orders: Sequence[dict] = [
+            {
+                "order_id": "sell-1",
+                "participant_id": "seller-1",
+                "side": "SELL",
+                "type": "LIMIT",
+                "quantity": 3.0,
+                "price": 100.5,
+            }
+        ]
+
+        updates: list[tuple[str, str, float, float | None]] = []
+
+        class StubUserOrderRepository:
+            def __init__(self, pool: Any) -> None:  # noqa: ARG002
+                return
+
+            async def update_order_status(
+                self,
+                order_id: str,
+                status: str,
+                filled_quantity: float,
+                avg_filled_price: float | None = None,
+            ) -> bool:
+                updates.append((order_id, status, filled_quantity, avg_filled_price))
+                return True
+
+        service._sessions._pool = object()
+
+        with patch("sim.services.UserOrderRepository", StubUserOrderRepository):
+            await service.process_tick(
+                session_id=1,
+                session_code="s-001",
+                tick=1,
+                orders=orders,
+                timestamp=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            )
+            await self._drain_background_tasks(service)
+
+        self.assertTrue(updates, "User order updates should be recorded")
+        events = cache.stream_events.get("s-001", [])
+        self.assertTrue(events, "Expected stream events to be published")
+
+        decoded_events = [json.loads(payload["payload"]) for payload in events]
+        channels = [evt.get("channel") for evt in decoded_events]
+        user_events = [evt for evt in decoded_events if evt.get("channel") == "user_orders"]
+        self.assertIn("user_orders", channels, f"Stream channels: {channels}")
+        last_user_event = user_events[-1]
+        self.assertEqual(last_user_event["order_id"], "user-order-1")
+        self.assertIn(
+            last_user_event["status"],
+            {"FILLED", "PARTIAL"},
+        )
+        self.assertEqual(last_user_event["user_id"], "42")
+        self.assertGreaterEqual(last_user_event["filled_quantity"], 3.0)
+        self.assertIsNotNone(cache.cached_orderbook)
 
 
 if __name__ == "__main__":

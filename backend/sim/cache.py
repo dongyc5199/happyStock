@@ -2,13 +2,17 @@
 from __future__ import annotations
 
 import json
+import os
+import time
 from dataclasses import dataclass
 from typing import Any, Optional, Sequence
 
 try:
     from redis import asyncio as aioredis  # type: ignore
+    from redis.exceptions import ResponseError  # type: ignore
 except ImportError:  # pragma: no cover
     aioredis = None  # type: ignore
+    ResponseError = Exception  # type: ignore[misc,assignment]
 
 
 @dataclass(slots=True)
@@ -24,12 +28,17 @@ class SimulationCache:
         if aioredis is None:  # pragma: no cover
             raise RuntimeError("redis[asyncio] 未安装，无法初始化仿真缓存。")
         self._client = client
+        self._supports_streams = True
 
     @classmethod
     async def create(cls, url: str) -> "SimulationCache":
         if aioredis is None:  # pragma: no cover
             raise RuntimeError("redis[asyncio] 未安装，无法初始化仿真缓存。")
-        client = aioredis.Redis.from_url(url, decode_responses=True)
+        client = aioredis.Redis.from_url(
+            url,
+            decode_responses=True,
+            max_connections=int(os.getenv("SIM_REDIS_MAX_CONNECTIONS", "50")),
+        )
         await client.ping()
         return cls(client)
 
@@ -156,7 +165,22 @@ class SimulationCache:
     # Event stream
     async def append_event(self, session: str, event: dict[str, Any], *, maxlen: int = 1000) -> str:
         key = self._stream_key(session)
-        return await self._client.xadd(key, event, maxlen=maxlen, approximate=True)
+        if self._supports_streams:
+            try:
+                return await self._client.xadd(
+                    key, event, maxlen=maxlen, approximate=True
+                )
+            except ResponseError as exc:  # pragma: no cover - Redis < 5.0
+                message = str(exc).lower()
+                if "unknown command" not in message:
+                    raise
+                self._supports_streams = False
+
+        payload = json.dumps(event, ensure_ascii=False)
+        await self._client.rpush(key, payload)
+        await self._client.ltrim(key, -maxlen, -1)
+        length = await self._client.llen(key)
+        return f"{session}:{length}"
 
     async def read_events(
         self,
@@ -167,16 +191,38 @@ class SimulationCache:
         block_ms: Optional[int] = None,
     ) -> list[tuple[str, dict[str, str]]]:
         key = self._stream_key(session)
-        kwargs = {}
-        if count is not None:
-            kwargs["count"] = count
-        if block_ms is not None:
-            kwargs["block"] = block_ms
-        entries = await self._client.xread({key: last_id}, **kwargs)
-        if not entries:
-            return []
-        # XREAD returns [(key, [(id, {field: value})...])]
-        _, messages = entries[0]
+        if self._supports_streams:
+            kwargs = {}
+            if count is not None:
+                kwargs["count"] = count
+            if block_ms is not None:
+                kwargs["block"] = block_ms
+            entries = await self._client.xread({key: last_id}, **kwargs)
+            if not entries:
+                return []
+            _, messages = entries[0]
+            return messages
+
+        messages: list[tuple[str, dict[str, str]]] = []
+        remaining = count or 1
+        timeout = (block_ms / 1000) if block_ms else None
+        while remaining > 0:
+            if timeout:
+                data = await self._client.blpop(key, timeout=timeout)
+                if data is None:
+                    break
+                _, payload = data
+            else:
+                payload = await self._client.lpop(key)
+                if payload is None:
+                    break
+            try:
+                parsed = json.loads(payload)
+            except json.JSONDecodeError:
+                parsed = {"payload": payload}
+            event_id = f"fallback-{time.time_ns()}"
+            messages.append((event_id, parsed))
+            remaining -= 1
         return messages
 
     # ------------------------------------------------------------------

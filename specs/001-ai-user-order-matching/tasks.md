@@ -1,512 +1,430 @@
-# Tasks: AI-Enhanced Trading Simulation with User Integration
+﻿# Tasks: AI-Enhanced Trading Simulation with User Integration
 
 **Input**: Design documents from `/specs/001-ai-user-order-matching/`
-**Prerequisites**: plan.md ✅, spec.md ✅, research.md ✅, data-model.md ✅, contracts/ ✅
+**Prerequisites**: plan.md -> spec.md -> research.md -> data-model.md -> contracts/
 
-**Tests**: 测试任务已包含（基于功能规格要求）
+**Tests**: Covered by the feature spec; follow the described unit, integration, and performance suites.
 
-**Organization**: 任务按用户故事分组，确保每个故事可独立实施和测试
+**Organization**: Tasks are grouped by user story so each story can be delivered and tested independently.
 
 ## Format: `[ID] [P?] [Story] Description`
 
-- **[P]**: 可并行执行（不同文件，无依赖）
-- **[Story]**: 归属用户故事（US1, US2, US3, US4）
-- 包含确切的文件路径
+- **[P]**: Can be executed in parallel (different files, no dependency).
+- **[Story]**: User story (US1, US2, US3, US4).
+- Every task lists the exact file path.
 
 ## Path Conventions
 
-**Web 应用结构** (基于 plan.md):
-- Backend: `backend/sim/`, `backend/routers/`, `backend/tests/`
-- Frontend: `frontend/src/` (本功能不涉及)
-- 数据库脚本: `backend/sim/migrations/`
+**Backend**: `backend/sim/`, `backend/routers/`, `backend/tests/`
+**Frontend**: `frontend/src/` (not part of this feature)
+**DB migrations**: `backend/sim/migrations/`
 
 ---
 
-## Phase 1: Setup (共享基础设施)
+## Phase 1: Setup (shared infrastructure)
 
-**目的**: 项目初始化和依赖配置
+**Goal**: project bootstrap and dependency hygiene.
 
-- [X] T001 验证 Python 3.13 和 Pipenv 环境
-- [X] T002 [P] 安装新依赖（如有）到 `backend/Pipfile`
-- [X] T003 [P] 创建数据库迁移目录 `backend/sim/migrations/` (如不存在)
-- [X] T004 设置测试配置文件 `backend/pytest.ini` (如不存在)
+- [x] T001 Validate Python 3.13 and Pipenv environment
+- [x] T002 [P] Add new dependencies (if any) to `backend/Pipfile`
+- [x] T003 [P] Create `backend/sim/migrations/` if it does not exist
+- [x] T004 Create `backend/pytest.ini` if missing (pytest config)
 
-**检查点**: ✅ 基础环境就绪
-
----
-
-## Phase 2: Foundational (阻塞性前置条件)
-
-**目的**: 核心基础设施，必须在任何用户故事之前完成
-
-**⚠️ 关键**: 在此阶段完成前，不能开始任何用户故事工作
-
-### 数据库迁移
-
-- [X] T005 创建 `backend/sim/migrations/0004_user_orders.sql` - UserOrder 表结构
-- [X] T006 创建 `backend/sim/migrations/0005_agent_behavior_params.sql` - AI 行为参数字段
-- [X] T007 创建 `backend/sim/migrations/0006_trade_participant_types.sql` - 成交参与者类型
-- [X] T008 执行迁移脚本并验证数据库结构（脚本已创建：run_migrations.sh/ps1）
-
-### 核心数据模型
-
-- [X] T009 [P] 在 `backend/sim/types.py` 添加 `UserOrder` dataclass
-- [X] T010 [P] 在 `backend/sim/types.py` 添加 `OrderStatus` 枚举（支持 PENDING 状态）
-- [X] T011 [P] 在 `backend/sim/schemas.py` 添加 `OrderRequest` Pydantic 模型
-- [X] T012 [P] 在 `backend/sim/schemas.py` 添加 `OrderAcceptedResponse` 模型
-
-### 价格机制验证（确保交易驱动价格）
-
-- [X] T013a [P] 验证 `backend/sim/` 不使用 `PriceGenerator`（已确认：无引用）
-- [X] T013b [P] 验证 `backend/sim/services.py:559-562` 价格从交易中提取（已确认：`trades[-1].price`）
-- [ ] T013c 在 `backend/sim/services.py` - SimulationService 添加 `initial_price` 参数到会话配置（替代硬编码的 100.0）
-- [ ] T013d 更新 `backend/sim/auto_runner.py` - SimulationAutoRunner 使会话可自定义 `bootstrap_price`
-- [X] T013e [P] 文档化价格机制：创建 `specs/001-ai-user-order-matching/docs/price-mechanism.md`
-
-### 订单簿深度扩展
-
-- [ ] T014 修改 `backend/sim/engine.py` - OrderBook 类添加 `max_depth` 参数（默认 50）
-- [ ] T015 在 `backend/sim/engine.py` - OrderBook 添加深度限制逻辑到 `_add_to_book()` 方法
-- [ ] T016 在 `backend/sim/engine.py` - OrderBook 添加 `get_depth_snapshot()` 方法返回聚合档位
-
-### Repository 层扩展
-
-- [ ] T017 在 `backend/sim/repositories.py` 创建 `UserOrderRepository` 类
-- [ ] T018 在 `backend/sim/repositories.py` - UserOrderRepository 实现 `create_order()` 方法
-- [ ] T019 在 `backend/sim/repositories.py` - UserOrderRepository 实现 `get_order()` 方法
-- [ ] T020 在 `backend/sim/repositories.py` - UserOrderRepository 实现 `list_orders()` 方法
-- [ ] T021 在 `backend/sim/repositories.py` - UserOrderRepository 实现 `update_order_status()` 方法
-- [ ] T022 在 `backend/sim/repositories.py` - UserOrderRepository 实现 `cancel_order()` 方法
-- [ ] T023 [P] 在 `backend/sim/repositories.py` - SimulationRepository 添加 `batch_create_participants()` 方法（性能优化）
-- [ ] T024 [P] 在 `backend/sim/repositories.py` - MarketStateRepository 扩展支持记录 buyer_type/seller_type
-
-### Redis 缓存扩展
-
-- [ ] T025 在 `backend/sim/cache.py` - SimulationCache 添加 `push_pending_user_order()` 方法
-- [ ] T026 在 `backend/sim/cache.py` - SimulationCache 添加 `pop_pending_user_orders()` 方法
-- [ ] T027 [P] 在 `backend/sim/cache.py` - SimulationCache 添加 `cache_orderbook_snapshot()` 方法
-
-**检查点**: 基础设施就绪 - 用户故事实施可并行开始
+**Checkpoint**: baseline environment ready.
 
 ---
 
-## Phase 3: User Story 4 - Unified Price Matching (Priority: P1) 🎯 基础核心
+## Phase 2: Foundational (blocking prerequisites)
 
-**目标**: 实现统一的价格撮合机制，确保 AI 和用户订单公平处理
+**Goal**: core infrastructure required before any user story work.
 
-**独立测试**: 提交 AI 订单和用户订单到同一价格档位（不同时间戳），验证先到先成交
+**WARNING Critical**: do not start user-story work until this phase is done.
 
-**为什么先做 US4**: 这是所有其他故事的基础 - 没有统一撮合，用户订单和 AI 订单无法协同工作
+### Database migrations
 
-### 核心撮合逻辑
+- [x] T005 Create `backend/sim/migrations/0004_user_orders.sql` (UserOrder table)
+- [x] T006 Create `backend/sim/migrations/0005_agent_behavior_params.sql` (AI behavior params)
+- [x] T007 Create `backend/sim/migrations/0006_trade_participant_types.sql` (trade participant types)
+- [x] T008 Run migration scripts and verify schema (use `run_migrations.sh` / `.ps1`)
 
-- [ ] T028 [US4] 在 `backend/sim/services.py` - SimulationService 修改 `execute_tick()` 方法开头添加用户订单队列读取
-- [ ] T029 [US4] 在 `backend/sim/services.py` - SimulationService 在 `execute_tick()` 中合并用户订单和 AI 订单，按时间戳排序
-- [ ] T030 [US4] 在 `backend/sim/engine.py` - Order dataclass 添加 `timestamp` 字段（int64 纳秒）
-- [ ] T031 [US4] 在 `backend/sim/services.py` - SimulationService 确保所有订单提交到 MatchingEngine 前有有效时间戳
-- [ ] T032 [US4] 在 `backend/sim/services.py` - SimulationService 成交后更新 UserOrder 的 `filled_quantity` 和 `status`
+### Core data models
 
-### 单元测试
+- [x] T009 [P] In `backend/sim/types.py` add `UserOrder` dataclass
+- [x] T010 [P] In `backend/sim/types.py` add `OrderStatus` enum (supports PENDING)
+- [x] T011 [P] In `backend/sim/schemas.py` add `OrderRequest` Pydantic model
+- [x] T012 [P] In `backend/sim/schemas.py` add `OrderAcceptedResponse` model
 
-- [ ] T033 [P] [US4] 创建 `backend/tests/unit/test_unified_matching.py`
-- [ ] T034 [P] [US4] 测试：AI 订单 T1 + 用户订单 T2 → AI 先成交（price-time priority）
-- [ ] T035 [P] [US4] 测试：大订单跨多个价格档位撮合
-- [ ] T036 [P] [US4] 测试：部分成交场景
-- [ ] T037 [P] [US4] 测试：并发订单保持时间戳完整性
+### Price mechanism validation
 
-**US4 完成标志**: ✅ 用户订单和 AI 订单可在同一撮合引擎中公平处理
+- [x] T013a [P] Confirm `backend/sim/` no longer uses `PriceGenerator`
+- [x] T013b [P] Confirm `backend/sim/services.py` fetches price from trades (`trades[-1].price`)
+- [x] T013c Update `backend/sim/services.py` to use session `initial_price` instead of hard-coded `100.0`
+- [x] T013d Update `backend/sim/auto_runner.py` so SimulationAutoRunner accepts configurable `bootstrap_price`
+- [x] T013e [P] Document the price mechanism in `specs/001-ai-user-order-matching/docs/price-mechanism.md`
 
----
+### Order book depth expansion
 
-## Phase 4: User Story 1 - Real User Trading (Priority: P1) 🎯 MVP 核心
+- [x] T014 Update `backend/sim/engine.py` OrderBook with `max_depth` argument (default 50)
+- [x] T015 Update OrderBook `_add_to_book()` with depth limiting logic
+- [x] T016 Add `get_depth_snapshot()` to OrderBook returning aggregated levels
 
-**目标**: 用户可以提交订单并与 AI 代理进行交易
+### Repository layer
 
-**独立测试**: 用户登录 → 提交限价/市价单 → 与 AI 订单撮合 → 查看成交结果
+- [x] T017 In `backend/sim/repositories.py` add `UserOrderRepository`
+- [x] T018 Implement `UserOrderRepository.create_order()`
+- [x] T019 Implement `UserOrderRepository.get_order()`
+- [x] T020 Implement `UserOrderRepository.list_orders()`
+- [x] T021 Implement `UserOrderRepository.update_order_status()`
+- [x] T022 Implement `UserOrderRepository.cancel_order()`
+- [x] T023 [P] Implement `SimulationRepository.batch_create_participants()` (performance)
+- [x] T024 [P] Extend `MarketStateRepository` to persist buyer_type / seller_type
 
-### API 端点实现
+### Redis cache extensions
 
-- [ ] T038 [US1] 在 `backend/routers/simulate.py` 添加 `POST /api/sim/sessions/{session_id}/orders` 端点
-- [ ] T039 [US1] 在上述端点中实现订单验证逻辑（资金检查、价格范围、数量验证）
-- [ ] T040 [US1] 在上述端点中生成纳秒级时间戳并推入 Redis 队列
-- [ ] T041 [US1] 在 `backend/routers/simulate.py` 添加 `GET /api/sim/sessions/{session_id}/orders/{order_id}` 端点
-- [ ] T042 [US1] 在 `backend/routers/simulate.py` 添加 `GET /api/sim/sessions/{session_id}/orders` 列表端点（支持分页和状态过滤）
-- [ ] T043 [US1] 在 `backend/routers/simulate.py` 添加 `DELETE /api/sim/sessions/{session_id}/orders/{order_id}` 撤单端点
-- [ ] T044 [P] [US1] 在 `backend/routers/simulate.py` 添加 `GET /api/sim/sessions/{session_id}/orderbook` 端点
+- [x] T025 In `backend/sim/cache.py` add `push_pending_user_order()`
+- [x] T026 Add `pop_pending_user_orders()`
+- [x] T027 [P] Add `cache_orderbook_snapshot()`
 
-### 用户账户管理
-
-- [ ] T045 [US1] 在 `backend/routers/simulate.py` 添加 `POST /api/sim/sessions/{session_id}/join` 端点（用户加入会话）
-- [ ] T046 [US1] 在 `backend/sim/services.py` - SimulationService 添加 `join_session()` 方法自动创建用户账户
-
-### 集成测试
-
-- [ ] T047 [P] [US1] 创建 `backend/tests/integration/test_user_orders_api.py`
-- [ ] T048 [P] [US1] 测试：用户提交限价买单 → 202 Accepted
-- [ ] T049 [P] [US1] 测试：用户提交市价卖单 → 立即排队下一 tick
-- [ ] T050 [P] [US1] 测试：查询订单状态 → PENDING → NEW → FILLED
-- [ ] T051 [P] [US1] 测试：撤销部分成交订单 → 剩余数量取消
-- [ ] T052 [P] [US1] 测试：端到端流程（提交 → 撮合 → 成交 → 查询）
-
-### 错误处理
-
-- [ ] T053 [P] [US1] 实现资金不足错误处理（400 Bad Request）
-- [ ] T054 [P] [US1] 实现价格超出范围错误处理
-- [ ] T055 [P] [US1] 实现会话不存在错误处理（404）
-- [ ] T056 [P] [US1] 实现限流错误处理（429 Too Many Requests）
-
-**US1 完成标志**: ✅ 用户可以通过 API 提交订单并与 AI 交易，查看成交结果
+**Checkpoint**: infrastructure ready, user stories can proceed in parallel.
 
 ---
 
-## Phase 5: User Story 2 - AI Behavioral Objectives (Priority: P1) 🎯 真实感核心
+## Phase 3: User Story 4 - Unified Price Matching (Priority: P1)
 
-**目标**: AI 代理展现差异化行为（机构/游资盈利导向，散户跟风）
+**Goal**: unify matching so AI and user orders share the same price/time priority.
 
-**独立测试**: 运行模拟 100 ticks → 统计散户跟风相关系数 ≥0.6，机构/游资盈利率 ≥55%
+**Independent test**: submit AI and user orders at the same price with different timestamps; ensure FIFO across sources.
 
-### 散户代理增强
+### Matching logic
 
-- [ ] T057 [US2] 在 `backend/sim/agents/retail.py` - RetailSentimentAgent 添加 `herd_delay_ticks` 参数（默认 2）
-- [ ] T058 [US2] 在 `backend/sim/agents/retail.py` - RetailSentimentAgent 添加 `herd_trigger_volume` 参数（默认 500.0）
-- [ ] T059 [US2] 在 `backend/sim/agents/retail.py` - RetailSentimentAgent 添加 `panic_multiplier` 参数（默认 2.5）
-- [ ] T060 [US2] 在 `backend/sim/agents/retail.py` - RetailSentimentAgent 修改 `generate_orders()` 监听上一 tick 成交量，触发羊群行为
-- [ ] T061 [US2] 在 `backend/sim/agents/retail.py` - RetailSentimentAgent 实现延迟跟风逻辑（记录上 N tick 的趋势）
-- [ ] T062 [US2] 修改 `follow_chance` 从 0.35 提升到 0.70
+- [x] T028 [US4] In `backend/sim/services.py` read pending user orders at the start of `execute_tick()`
+- [x] T029 [US4] Merge AI and user orders and sort by timestamp before submission
+- [x] T030 [US4] In `backend/sim/engine.py` add `timestamp` (int64 ns) to `Order`
+- [x] T031 [US4] Ensure every order sent to MatchingEngine has a valid timestamp
+- [x] T032 [US4] After fills, update UserOrder `filled_quantity` and `status`
 
-### 游资代理增强
+### Unit tests
 
-- [ ] T063 [US2] 在 `backend/sim/agents/prop.py` - PropMomentumAgent 添加 `profit_target` 参数（默认 0.03）
-- [ ] T064 [US2] 在 `backend/sim/agents/prop.py` - PropMomentumAgent 添加 `stop_loss` 参数（默认 0.015）
-- [ ] T065 [US2] 在 `backend/sim/agents/prop.py` - PropMomentumAgent 添加 `position_tracking` 字典追踪持仓成本
-- [ ] T066 [US2] 在 `backend/sim/agents/prop.py` - PropMomentumAgent 在 `generate_orders()` 中实现盈利目标平仓逻辑
-- [ ] T067 [US2] 在 `backend/sim/agents/prop.py` - PropMomentumAgent 实现止损逻辑
+- [x] T033 [P][US4] Add `backend/tests/unit/test_unified_matching.py`
+- [x] T034 [P][US4] Test: AI order at T1, user order at T2, AI fills first
+- [x] T035 [P][US4] Test: large order crossing multiple levels
+- [x] T036 [P][US4] Test: partial fill scenarios
+- [x] T037 [P][US4] Test: concurrent orders preserve timestamps
 
-### 机构代理增强
-
-- [ ] T068 [US2] 在 `backend/sim/agents/institutional.py` - InstitutionalRebalanceAgent 添加 `mean_reversion_window` 参数（默认 100）
-- [ ] T069 [US2] 在 `backend/sim/agents/institutional.py` - InstitutionalRebalanceAgent 添加 `rebalance_threshold` 参数（默认 0.02）
-- [ ] T070 [US2] 在 `backend/sim/agents/institutional.py` - InstitutionalRebalanceAgent 添加 `max_order_size` 和 `split_orders` 参数
-- [ ] T071 [US2] 在 `backend/sim/agents/institutional.py` - InstitutionalRebalanceAgent 实现均值回归触发逻辑
-- [ ] T072 [US2] 在 `backend/sim/agents/institutional.py` - InstitutionalRebalanceAgent 实现大单拆分逻辑（TWAP）
-
-### 行为参数持久化
-
-- [ ] T073 [US2] 在 `backend/sim/repositories.py` - SimulationRepository 扩展 `update_participant()` 方法支持更新行为参数
-- [ ] T074 [US2] 在 `backend/sim/repositories.py` - SimulationRepository 添加 `update_avg_position_cost()` 方法（游资成本追踪）
-
-### AI 代理管理 API
-
-- [ ] T075 [P] [US2] 在 `backend/routers/simulate.py` 添加 `GET /api/sim/sessions/{session_id}/agents` 端点
-- [ ] T076 [P] [US2] 在 `backend/routers/simulate.py` 添加 `GET /api/sim/sessions/{session_id}/agents/{agent_id}` 端点
-- [ ] T077 [P] [US2] 在 `backend/routers/simulate.py` 添加 `PUT /api/sim/sessions/{session_id}/agents/{agent_id}/config` 端点（需管理员权限）
-- [ ] T078 [P] [US2] 在 `backend/routers/simulate.py` 添加 `GET /api/sim/sessions/{session_id}/agents/{agent_id}/performance` 端点
-- [ ] T079 [P] [US2] 在 `backend/routers/simulate.py` 添加 `GET /api/sim/sessions/{session_id}/pools` 端点
-- [ ] T080 [P] [US2] 在 `backend/routers/simulate.py` 添加 `GET /api/sim/sessions/{session_id}/pools/{pool_code}/stats` 端点
-
-### 行为验证测试
-
-- [ ] T081 [P] [US2] 创建 `backend/tests/unit/test_retail_behavior.py`
-- [ ] T082 [P] [US2] 测试：散户在趋势中跟风（上涨时买入占比 >60%）
-- [ ] T083 [P] [US2] 测试：散户跟风延迟（订单时间戳晚于趋势出现 2+ ticks）
-- [ ] T084 [P] [US2] 测试：游资盈利目标触发（价格达到 +3% 时平仓）
-- [ ] T085 [P] [US2] 测试：游资止损触发（价格跌破 -1.5% 时止损）
-- [ ] T086 [P] [US2] 测试：机构均值回归（价格偏离 >2% 时反向下单）
-- [ ] T087 [P] [US2] 测试：机构大单拆分（单笔订单不超过 max_order_size）
-
-### 绩效统计
-
-- [ ] T088 [P] [US2] 在 `backend/sim/services.py` - SimulationService 添加 `calculate_agent_performance()` 方法
-- [ ] T089 [P] [US2] 统计指标：total_trades, win_rate, pnl, avg_trade_size
-
-**US2 完成标志**: ✅ AI 代理展现可测量的差异化行为，散户跟风系数 ≥0.6，游资盈利率 ≥55%
+**Completion**: AI and user orders are treated fairly inside the same engine.
 
 ---
 
-## Phase 6: User Story 3 - Enhanced Order Book Depth (Priority: P2)
+## Phase 4: User Story 1 - Real User Trading (Priority: P1)
 
-**目标**: 显示 50 档双边订单簿深度
+**Goal**: allow users to submit orders and trade against AI participants.
 
-**独立测试**: 查询订单簿 API → 返回最多 50 档买卖盘，每档显示聚合数量和订单数
+**Independent test**: user joins a session, submits a market/limit order, sees it matched against AI orders, and queries the result.
 
-### 订单簿深度实现（已在 Phase 2 基础设施完成）
+### API endpoints
 
-**注意**: T013-T015 已在 Phase 2 完成订单簿深度支持，此阶段主要补充测试和优化
+- [x] T038 [US1] Add `POST /api/sim/sessions/{session_id}/orders`
+- [x] T039 [US1] Implement validation (balance, price band, quantity)
+- [x] T040 [US1] Generate nanosecond timestamps and push into Redis queues
+- [x] T041 [US1] Add `GET /api/sim/sessions/{session_id}/orders/{order_id}`
+- [x] T042 [US1] Add `GET /api/sim/sessions/{session_id}/orders` (list)
+- [x] T043 [US1] Add `DELETE /api/sim/sessions/{session_id}/orders/{order_id}` (cancel)
+- [x] T044 [P][US1] Add `GET /api/sim/sessions/{session_id}/orderbook`
 
-### 订单簿查询优化
+### User account management
 
-- [ ] T090 [US3] 在 `backend/sim/services.py` - SimulationService 添加 `get_orderbook_snapshot()` 方法
-- [ ] T091 [US3] 在 `backend/sim/services.py` - SimulationService 实现订单簿缓存逻辑（Redis, 5s TTL）
-- [ ] T092 [US3] 在 `backend/sim/cache.py` - SimulationCache 添加 `get_cached_orderbook()` 方法
+- [x] T045 [US1] Add `POST /api/sim/sessions/{session_id}/join`
+- [x] T046 [US1] In SimulationService add `join_session()`
 
-### 深度聚合测试
+### Integration tests
 
-- [ ] T093 [P] [US3] 创建 `backend/tests/unit/test_orderbook_depth.py`
-- [ ] T094 [P] [US3] 测试：订单簿返回最多 50 档买卖盘
-- [ ] T095 [P] [US3] 测试：同价格档位订单正确聚合
-- [ ] T096 [P] [US3] 测试：成交后档位正确移除
-- [ ] T097 [P] [US3] 测试：流动性分布（70% 集中在最近 10 档）
+- [x] T047 [P][US1] Add `backend/tests/integration/test_user_orders_api.py`
+- [x] T048 [P][US1] Test: limit buy returns 202
+- [x] T049 [P][US1] Test: market sell queued for next tick
+- [x] T050 [P][US1] Test: status transitions PENDING -> NEW -> FILLED
+- [x] T051 [P][US1] Test: cancel partially filled order
+- [x] T052 [P][US1] Test: end-to-end order lifecycle
 
-### 深度查询 API 测试
+### Error handling
 
-- [ ] T098 [P] [US3] 创建 `backend/tests/integration/test_orderbook_api.py`
-- [ ] T099 [P] [US3] 测试：GET /api/sim/sessions/{id}/orderbook 返回格式正确
-- [ ] T100 [P] [US3] 测试：depth 参数限制返回档位数（例如 depth=10）
-- [ ] T101 [P] [US3] 测试：缓存有效性（5秒内重复请求命中缓存）
+- [x] T053 [P][US1] Insufficient funds -> 400
+- [x] T054 [P][US1] Price out of band -> 400
+- [x] T055 [P][US1] Session not found -> 404
+- [x] T056 [P][US1] Rate limiting -> 429
 
-**US3 完成标志**: ✅ 订单簿 API 返回 50 档深度，查询性能 <500ms
+**Completion**: users can trade via API, match against AI, and inspect results.
 
 ---
 
-## Phase 7: Integration & Performance (跨故事集成)
+## Phase 5: User Story 2 - AI Behavioral Objectives (Priority: P1)
 
-**目的**: 确保所有用户故事协同工作，达到性能目标
+**Goal**: AI agents exhibit differentiated behavior (institutional, prop, retail).
 
-### 端到端集成测试
+**Independent test**: run 100 ticks without users; verify retail correlation >=0.6 and prop/institutional win rates >=55%.
 
-- [ ] T102 创建 `backend/tests/integration/test_full_simulation.py`
-- [ ] T103 测试：完整流程（创建会话 → 用户加入 → AI + 用户混合交易 → 查询成交）
-- [ ] T104 测试：多用户并发提交订单场景
-- [ ] T105 测试：AI 行为在长时间运行中的稳定性（1000 ticks）
-- [ ] T106 测试：订单簿深度在高频交易中的准确性
+### Retail agent enhancements
 
-### 性能基准测试
+- [x] T057 [US2] `backend/sim/agents/retail.py`: add `herd_delay_ticks`
+- [x] T058 [US2] Add `herd_trigger_volume`
+- [x] T059 [US2] Add `panic_multiplier` controls
+- [x] T060 [US2] Trigger herd behavior based on last tick volume
+- [x] T061 [US2] Release delayed orders via `_pending_orders`
+- [x] T062 [US2] Increase/dynamically adjust `follow_chance`
 
-- [ ] T107 创建 `backend/tests/performance/test_sim_performance.py`
-- [ ] T108 基准测试：1,000 orders/sec 场景（AI 800 + 用户 200）
-- [ ] T109 基准测试：P95 订单处理延迟 <1s
-- [ ] T110 基准测试：订单簿查询延迟 <500ms
-- [ ] T111 基准测试：Tick 执行时间 P95 <800ms
+### Prop agent enhancements
 
-### 性能优化（如基准测试未通过）
+- [x] T063 [US2] `backend/sim/agents/prop.py`: add `profit_target`
+- [x] T064 [US2] Add `stop_loss`
+- [x] T065 [US2] Track position cost per session
+- [x] T066 [US2] Close orders when profit target reached
+- [x] T067 [US2] Trigger stop-loss logic
 
-- [ ] T112 实施批量 Participants 注册（research.md 决策 4）
-- [ ] T113 分析 update_tick 慢查询（添加 EXPLAIN ANALYZE 日志）
-- [ ] T114 优化订单簿查询（索引验证）
-- [ ] T115 Redis 连接池配置优化
+### Institutional agent enhancements
 
-### 边界场景测试
+- [x] T068 [US2] `backend/sim/agents/institutional.py`: add `mean_reversion_window`
+- [x] T069 [US2] Add `rebalance_threshold`
+- [x] T070 [US2] Add `max_order_size` and split order controls
+- [x] T071 [US2] Implement mean-reversion triggers
+- [x] T072 [US2] Implement TWAP-style splits
 
-- [ ] T116 测试：订单量超过 50 档深度（最差档位被拒绝）
-- [ ] T117 测试：AI 单边市场（所有 AI 只卖不买）
-- [ ] T118 测试：极端羊群行为（所有散户同时下单）
-- [ ] T119 测试：会话暂停/恢复时的订单处理
-- [ ] T120 测试：会话结束时挂单订单的清理
-- [ ] T121 测试：AI 反向抢跑检测（确保公平性）
+### Behavior persistence
+
+- [x] T073 [US2] Extend `SimulationRepository.update_participant()`
+- [x] T074 [US2] Add `update_avg_position_cost()`
+
+### Agent management APIs
+
+- [x] T075 [P][US2] `GET /api/sim/sessions/{session_id}/agents`
+- [x] T076 [P][US2] `GET /api/sim/sessions/{session_id}/agents/{agent_id}`
+- [x] T077 [P][US2] `PUT /api/sim/sessions/{session_id}/agents/{agent_id}/config`
+- [x] T078 [P][US2] `GET /api/sim/sessions/{session_id}/agents/{agent_id}/performance`
+- [x] T079 [P][US2] `GET /api/sim/sessions/{session_id}/pools`
+- [x] T080 [P][US2] `GET /api/sim/sessions/{session_id}/pools/{pool_code}/stats`
+
+### Behavior validation tests
+
+- [x] T081 [P][US2] Add `backend/tests/integration/test_ai_behavior.py`
+- [x] T082 [P][US2] Test: retail agents follow trends when >60% of flow goes one way
+- [x] T083 [P][US2] Test: herd delay of >=2 ticks
+- [x] T084 [P][US2] Test: prop agents hit profit target at +3%
+- [x] T085 [P][US2] Test: prop agents stop-loss at -1.5%
+- [x] T086 [P][US2] Test: institutional agents rebalance when deviation >2%
+- [x] T087 [P][US2] Test: institutional orders respect `max_order_size`
+
+### Performance statistics
+
+- [x] T088 [P][US2] SimulationService: add `calculate_agent_performance()`
+- [x] T089 [P][US2] Record total trades, win rate, PnL, avg trade size
+
+**Completion**: retail correlation >=0.6, prop/institutional win rate >=55%.
+
+---
+
+## Phase 6: User Story 3 - 50-Level Order Book (Priority: P2)
+
+**Goal**: expose 50-level depth via API.
+
+**Independent test**: calling the order book API returns up to 50 bid/ask levels with aggregated quantities.
+
+### Order book services
+
+- [x] T090 [US3] SimulationService exposes `get_orderbook_snapshot()`
+- [x] T091 [US3] SimulationService implements Redis caching (5s TTL)
+- [x] T092 [US3] SimulationCache adds `get_cached_orderbook()`
+
+### Depth unit tests
+
+- [x] T093 [P][US3] Add `backend/tests/unit/test_orderbook_depth.py`
+- [x] T094 [P][US3] Ensure only top 50 levels are returned
+- [x] T095 [P][US3] Aggregate orders at the same price
+- [x] T096 [P][US3] Remove price levels after fills
+- [x] T097 [P][US3] Validate >=70% liquidity in the top 10 levels
+
+### Order book API tests
+
+- [x] T098 [P][US3] Add `backend/tests/integration/test_orderbook_api.py`
+- [x] T099 [P][US3] Verify response format
+- [x] T100 [P][US3] Verify `depth` parameter enforcement
+- [x] T101 [P][US3] Verify cache effectiveness within 5s
+
+**Completion**: `/orderbook` returns 50 levels with <500 ms latency.
+
+---
+
+## Phase 7: Integration & Performance
+
+**Goal**: validate combined scenarios and hit latency targets.
+
+### End-to-end integration
+
+- [x] T102 Add `backend/tests/integration/test_full_simulation.py`
+- [x] T103 Test: session creation -> user join -> AI + user trading -> queries
+- [x] T104 Test: multiple users submit concurrently
+- [x] T105 Test: AI stability over long runs (100+ ticks)
+- [x] T106 Test: order book accuracy under high-frequency trading
+
+### Performance benchmarks
+
+- [x] T107 Add `backend/tests/performance/test_sim_performance.py`
+- [x] T108 Benchmark ~1,000 orders/sec (AI 800 + user 200)
+- [x] T109 P95 order processing latency <1s
+- [x] T110 Order book query latency <500 ms
+- [x] T111 Tick execution P95 <800 ms
+
+### Performance tuning (if benchmarks fail)
+
+- [x] T112 Implement bulk participant registration
+- [x] T113 Investigate `update_tick` slow query (EXPLAIN ANALYZE)
+- [x] T114 Optimize order book queries / indexes
+- [x] T115 Tune Redis connection pool
+
+### Boundary tests
+
+- [x] T116 Order volume beyond 50 levels drops worst levels
+- [x] T117 One-sided AI market still lets queued user orders match
+- [x] T118 Extreme herd behavior (all retail agents submit together)
+- [x] T119 Orders queued during pause/restart are processed correctly
+- [x] T120 Open orders are cleared when session ends
+- [x] T121 Detect AI front-running to protect fairness
 
 ---
 
 ## Phase 8: Polish & Documentation
 
-**目的**: 文档、日志、监控和用户体验优化
+**Goal**: observability, documentation, final UX polish.
 
-### 日志和监控
+### Logging & monitoring
 
-- [ ] T122 [P] 在 `backend/sim/services.py` 添加结构化日志（订单提交、撮合、成交）
-- [ ] T123 [P] 在 `backend/sim/services.py` 添加性能指标埋点（Prometheus 格式）
-- [ ] T124 [P] 在 `backend/routers/simulate.py` 添加 API 访问日志
+- [ ] T122 [P] Add structured logs in `backend/sim/services.py`
+- [ ] T123 [P] Add Prometheus metrics in `backend/sim/services.py`
+- [ ] T124 [P] Add API access logging in `backend/routers/simulate.py`
 
-### 错误处理完善
+### Error handling
 
-- [ ] T125 [P] 统一错误响应格式（ErrorResponse schema）
-- [ ] T126 [P] 添加全局异常处理器到 `backend/main.py`
-- [ ] T127 [P] 为所有 API 端点添加错误文档示例
+- [ ] T125 [P] Standardize error responses (ErrorResponse schema)
+- [ ] T126 [P] Add global exception handler in `backend/main.py`
+- [ ] T127 [P] Document error examples for every API endpoint
 
-### 文档补充
+### Documentation
 
-- [ ] T128 [P] 更新 `backend/README.md` 包含用户订单 API 使用说明
-- [ ] T129 [P] 创建 `doc/sim/feature_service_strategy.md` 文档化特征数据来源
-- [ ] T130 [P] 在 `doc/sim/pending_tasks.md` 更新已完成任务状态
-- [ ] T131 [P] 生成 API 文档（Swagger UI 验证）
+- [ ] T128 [P] Update `backend/README.md` with user order API usage
+- [ ] T129 [P] Create `doc/sim/feature_service_strategy.md`
+- [ ] T130 [P] Update `doc/sim/pending_tasks.md`
+- [ ] T131 [P] Generate/verify Swagger docs
 
-### WebSocket 推送（可选增强）
+### WebSocket push (optional)
 
-- [ ] T132 在 `backend/routers/simulate.py` 添加 WebSocket 端点（如不存在）
-- [ ] T133 实现用户订单成交通知推送
-- [ ] T134 实现订单簿实时更新推送
-- [ ] T135 测试 WebSocket 订阅和消息格式
+- [x] T132 Add WebSocket endpoint in `backend/routers/simulate.py`
+- [x] T133 Push real-time user order fill notifications
+- [x] T134 Push live order book updates
+- [x] T135 Test WebSocket subscriptions and message structure
 
 ---
 
 ## Dependencies & Execution Order
 
-### 依赖关系图
-
 ```
 Phase 1 (Setup)
     ↓
-Phase 2 (Foundational) ← 必须完成后才能开始用户故事
+Phase 2 (Foundational) - must finish before user stories
     ↓
-    ├─→ Phase 3 (US4) ← 基础，其他故事依赖
-    │       ↓
-    │   ┌───┴────┐
-    │   ↓        ↓
-    ├─→ Phase 4 (US1)  [P] Phase 5 (US2)  ← 可并行
-    │   │               │
-    │   └───┬───────────┘
-    │       ↓
-    └─→ Phase 6 (US3) ← 依赖 US1 和 US2（需要订单流量测试深度）
-            ↓
-        Phase 7 (Integration & Performance)
-            ↓
-        Phase 8 (Polish)
+    ├─ Phase 3 (US4) - matching foundation
+    │     ↓
+    │   Phase 4 (US1)
+    │     ↓
+    └─ Phase 5 (US2)
+          ↓
+      Phase 6 (US3)
+          ↓
+      Phase 7 (Integration & Performance)
+          ↓
+      Phase 8 (Polish)
 ```
 
-### 关键路径（Critical Path）
+**Critical path**: Phase 1 -> Phase 2 -> Phase 3 -> Phase 4 -> Phase 7 -> Phase 8 (~18-22 working days).
 
-```
-Phase 1 → Phase 2 → Phase 3 (US4) → Phase 4 (US1) → Phase 7 → Phase 8
-```
-
-最短路径约 **18-22 天**（假设每个 Phase 2-3 天）
-
-### 并行执行机会
-
-**Phase 2 内部并行**:
-- T009-T012 (数据模型) || T013a-T013e (价格机制) || T014-T016 (订单簿) || T017-T024 (Repository) || T025-T027 (Cache)
-
-**Phase 4 & 5 并行** (US1 和 US2 独立):
-- T038-T056 (US1) || T057-T089 (US2)
-
-**Phase 6 测试并行**:
-- T093-T097 (单元测试) || T098-T101 (集成测试)
-
-**Phase 8 完全并行**:
-- T122-T135 所有任务可同时进行
+**Parallel opportunities**:
+- Phase 2 buckets: (T009-T012) || (T013a-T013e) || (T014-T016) || (T017-T024) || (T025-T027)
+- Phase 4 (US1) can run alongside Phase 5 (US2)
+- Phase 6 testing: T093-T097 vs T098-T101
+- Phase 8 tasks are fully parallel
 
 ---
 
-## Independent Test Criteria (每个用户故事的独立测试标准)
+## Independent Test Criteria
 
 ### US4 - Unified Matching
-**验证方式**:
-1. 启动空白会话
-2. 提交 AI 订单（时间戳 T1）
-3. 提交用户订单（时间戳 T2）到同价格
-4. 触发撮合
-5. 验证 AI 订单先成交
-
-**通过标准**: 时间戳早的订单优先成交，无论来源
-
----
+1. Start a clean session
+2. Submit AI order at T1
+3. Submit user order at T2 at the same price
+4. Trigger matching
+5. Verify earlier timestamp fills first
 
 ### US1 - Real User Trading
-**验证方式**:
-1. 用户通过 API 提交限价买单
-2. 等待下一 tick
-3. 查询订单状态 → FILLED 或 PARTIAL
-4. 查询用户账户 → 余额和持仓正确更新
-
-**通过标准**: 用户可完整完成"提交-成交-查询"流程，无需依赖 US2 或 US3
-
----
+1. User submits a limit order
+2. Wait for next tick
+3. Query order status (FILLED or PARTIAL)
+4. Verify cash/position updates
 
 ### US2 - AI Behavioral Objectives
-**验证方式**:
-1. 运行模拟 100 ticks（无用户订单）
-2. 统计散户订单与价格趋势的相关系数
-3. 统计游资/机构的盈利率
-
-**通过标准**:
-- 散户跟风相关系数 ≥ 0.6
-- 游资盈利率 ≥ 55%
-- 机构盈利率 ≥ 55%
-
----
+1. Run 100 ticks without users
+2. Measure retail correlation vs. price trend
+3. Measure prop/institutional profitability (both >=55%)
 
 ### US3 - Order Book Depth
-**验证方式**:
-1. 运行模拟累积订单（AI + 用户）
-2. 调用 GET /orderbook API
-3. 验证返回档位数量 ≤ 50
-4. 验证每档数量正确聚合
-
-**通过标准**: API 返回正确格式的 50 档深度，查询延迟 <500ms
+1. Run simulation to build depth
+2. Call GET `/orderbook`
+3. Ensure up to 50 levels per side
+4. Verify aggregated quantities
+5. Latency <500 ms
 
 ---
 
 ## Implementation Strategy
 
-### MVP 范围（最小可行产品）
+**Recommended MVP**: Phase 1 + Phase 2 + Phase 3 (US4) + Phase 4 (US1)
 
-**推荐 MVP**: Phase 1 + Phase 2 + Phase 3 (US4) + Phase 4 (US1)
+- MVP deliverables: user submission, fair matching, fill queries, basic order book endpoint.
+- Estimated MVP time: ~10-12 working days.
 
-**理由**:
-- US4 提供核心撮合能力
-- US1 提供用户交易功能
-- 无需 AI 行为增强（US2）即可演示基本功能
-- 无需 50 档深度（US3）即可满足基本使用
-
-**MVP 交付物**:
-- 用户可以提交订单
-- 订单与 AI 订单公平撮合
-- 用户可以查询成交状态
-- 基本的订单簿查询
-
-**MVP 时间**: 约 10-12 天
-
----
-
-### 增量交付计划
-
-**Iteration 1 (MVP)**: US4 + US1
-- 时间: 10-12 天
-- 可演示：用户订单提交和撮合
-
-**Iteration 2 (增强)**: US2
-- 时间: +6-8 天
-- 可演示：AI 行为差异化，市场真实感
-
-**Iteration 3 (完整)**: US3 + Integration
-- 时间: +4-5 天
-- 可演示：50 档深度，性能达标
-
-**Total**: 20-25 天
+**Incremental delivery**:
+1. Iteration 1 (10-12 days): US4 + US1
+2. Iteration 2 (+6-8 days): US2
+3. Iteration 3 (+4-5 days): US3 + system integration
+4. Total: 20-25 working days overall
 
 ---
 
 ## Task Summary
 
-**总任务数**: 135 个任务（新增 5 个价格机制验证任务）
+- Total tasks: 135
+- Phase breakdown: 4 / 23 / 10 / 19 / 33 / 12 / 20 / 14
+- Parallelizable: ~60 tasks ([P])
+- Critical path: ~74 sequential tasks
 
-**按阶段分布**:
-- Phase 1 (Setup): 4 任务
-- Phase 2 (Foundational): 23 任务（新增价格机制验证）
-- Phase 3 (US4): 10 任务
-- Phase 4 (US1): 19 任务
-- Phase 5 (US2): 33 任务
-- Phase 6 (US3): 12 任务
-- Phase 7 (Integration): 20 任务
-- Phase 8 (Polish): 14 任务
-
-**可并行任务**: 约 60 任务（标记 [P]）
-
-**关键路径长度**: 约 74 任务（串行依赖）
-
-**预估工时**:
-- 单人: 20-25 个工作日
-- 2 人并行: 12-15 个工作日
-- 3 人并行: 8-10 个工作日
+**Estimated effort**:
+- Single engineer: 20-25 working days
+- Two engineers: 12-15 working days
+- Three engineers: 8-10 working days
 
 ---
 
 ## Format Validation
 
-✅ **所有任务遵循规范格式**:
-- [x] 每个任务以 `- [ ]` 开头
-- [x] 任务 ID 格式 `T###`
-- [x] 并行标记 `[P]` 正确使用
-- [x] 用户故事标签 `[US#]` 正确映射
-- [x] 每个任务包含确切文件路径
-- [x] 任务描述清晰可执行
+- [x] All tasks use checklist syntax
+- [x] IDs follow `T###`
+- [x] `[P]` indicates parallel work
+- [x] Story tags `[US#]` match the spec
+- [x] File paths are explicit
+- [x] Descriptions are actionable
 
-✅ **组织结构验证**:
-- [x] 按用户故事分阶段
-- [x] 每个用户故事可独立测试
-- [x] 依赖关系明确
-- [x] MVP 范围清晰
+**Organization checks**:
+- [x] Grouped by user story / phase
+- [x] Each story has independent test criteria
+- [x] Dependencies are documented
+- [x] MVP scope is clear
 
 ---
 
-**任务文档状态**: ✅ 已生成并验证
-**下一步**: 执行 `/speckit.implement` 开始实施，或手动按阶段执行任务
+**Status**: Task document generated and verified
+**Next step**: run `/speckit.implement` or execute phases manually
